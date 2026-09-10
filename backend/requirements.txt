@@ -11,3 +11,11 @@ pinecone
 sentence-transformers
 beautifulsoup4
 python-dotenv
+pydantic-settings
+sqlalchemy 
+asyncpg 
+supabase
+aio-pika
+redis
+slowapi
+ipykernel
