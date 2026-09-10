@@ -1,6 +1,6 @@
-from app.core.config import get_settings
+from app.services.ingestion import load_file,chunck_documents
+from pathlib import Path
 
-settings = get_settings();
-
-print(f"APP name: {settings.app_name}")
-print(f"App name :{settings.embedding_model}")
+docs = load_file(Path("data/sample_kb/company_hr_handbook.md"))
+chunked_docs = chunck_documents(docs)
+print(len(chunked_docs))
