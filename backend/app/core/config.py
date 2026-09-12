@@ -26,8 +26,12 @@ class Settings(BaseSettings):
     # Embeddings
     # embedding_model: str = "text-embedding-3-small"
     # Embeddings
-    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    #embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     
+    embedding_model: str = "embed-v4.0"
+    cohere_api_key: str = ""
+    embedding_dimension: int
+
     # RAG
     top_k: int = 5
     max_retries: int = 2

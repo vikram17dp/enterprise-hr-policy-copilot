@@ -11,8 +11,6 @@ settings = get_settings()
 
 _vectorstore = None
 
-# EMBEDDING_DIMENSION = 1536
-EMBEDDING_DIMENSION = 384
 
 
 def ensure_index():
@@ -28,7 +26,7 @@ def ensure_index():
     if index_name not in existing_indexes:
         pc.create_index(
             name=index_name,
-            dimension=EMBEDDING_DIMENSION,
+            dimension=settings.embedding_dimension,
             metric="cosine",
             spec=ServerlessSpec(
                 cloud="aws",
