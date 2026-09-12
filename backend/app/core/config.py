@@ -24,8 +24,10 @@ class Settings(BaseSettings):
     pinecone_namespace: str = "hr-policies"
 
     # Embeddings
-    embedding_model: str = "text-embedding-3-small"
-
+    # embedding_model: str = "text-embedding-3-small"
+    # Embeddings
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    
     # RAG
     top_k: int = 5
     max_retries: int = 2

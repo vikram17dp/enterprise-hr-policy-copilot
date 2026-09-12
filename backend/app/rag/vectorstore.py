@@ -11,7 +11,8 @@ settings = get_settings()
 
 _vectorstore = None
 
-EMBEDDING_DIMENSION = 1536
+# EMBEDDING_DIMENSION = 1536
+EMBEDDING_DIMENSION = 384
 
 
 def ensure_index():

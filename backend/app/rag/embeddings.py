@@ -1,22 +1,15 @@
-from langchain_openai import OpenAIEmbeddings
+from functools import lru_cache
+
+from langchain_huggingface import HuggingFaceEmbeddings
+
 from app.core.config import get_settings
 
 
 settings = get_settings()
 
-_embeddings = None
 
-
+@lru_cache
 def get_embeddings():
-    global _embeddings
-
-    if _embeddings is None:
-        if not settings.openai_api_key:
-            raise RuntimeError("OPENAI_API_KEY is missing")
-
-        _embeddings = OpenAIEmbeddings(
-            model="text-embedding-3-small",
-            api_key=settings.openai_api_key,
-        )
-
-    return _embeddings
+    return HuggingFaceEmbeddings(
+        model_name=settings.embedding_model
+    )
