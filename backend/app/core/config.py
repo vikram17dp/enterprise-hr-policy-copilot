@@ -4,13 +4,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+
     # Application
     app_name: str = "Enterprise HR Policy Agentic RAG Copilot"
     app_env: str = "development"
 
+    # Local sample knowledge base
+    sample_kb_dir: str = "data/sample_kb"
+
     # LLM / Search
     groq_api_key: str = ""
     tavily_api_key: str = ""
+    openai_api_key: str = ""
 
     # Pinecone
     pinecone_api_key: str = ""
@@ -21,8 +26,8 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
 
     # RAG
-    top_k: int = 4
-    max_retries: int = 1
+    top_k: int = 5
+    max_retries: int = 2
 
     # Supabase
     supabase_url: str = ""
