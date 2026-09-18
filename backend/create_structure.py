@@ -18,6 +18,7 @@ folders = [
     "tests",
 ]
 
+
 # Files
 files = [
     "app/__init__.py",
