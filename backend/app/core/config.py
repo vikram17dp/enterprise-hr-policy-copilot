@@ -14,7 +14,8 @@ class Settings(BaseSettings):
     sample_kb_dir: str = "data/sample_kb"
 
     # LLM / Search
-    groq_api_key: str = ""
+    groq_api_key: str
+    groq_model: str = "openai/gpt-oss-120b"
     tavily_api_key: str = ""
     openai_api_key: str = ""
 
@@ -23,10 +24,6 @@ class Settings(BaseSettings):
     pinecone_index_name: str = "enterprise-hr-policy-copilot"
     pinecone_namespace: str = "hr-policies"
 
-    # Embeddings
-    # embedding_model: str = "text-embedding-3-small"
-    # Embeddings
-    #embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     
     embedding_model: str = "embed-v4.0"
     cohere_api_key: str = ""

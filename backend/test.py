@@ -1,10 +1,31 @@
-from app.rag.embeddings import get_embeddings
+import os
+from dotenv import load_dotenv
+from groq import Groq
 
-embeddings = get_embeddings()
+load_dotenv()
 
-text = "How many casual leaves are employees allowed?"
+api_key = os.getenv("GROQ_API_KEY")
 
-vector = embeddings.embed_query(text)
+if not api_key:
+    print("❌ GROQ_API_KEY not found")
+    exit()
 
-print("Embedding dimension:", len(vector))
-print("First 10 values:", vector[:10])
+try:
+    client = Groq(api_key=api_key)
+
+    response = client.chat.completions.create(
+         model="openai/gpt-oss-120b",
+        messages=[
+            {
+                "role": "user",
+                "content": "Say hello in one sentence."
+            }
+        ],
+    )
+
+    print("✅ Groq API key is working!")
+    print(response.choices[0].message.content)
+
+except Exception as e:
+    print("❌ Groq API request failed")
+    print(f"Error: {e}")

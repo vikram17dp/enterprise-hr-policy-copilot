@@ -1,5 +1,5 @@
 from app.core.config import get_settings
-from app.ra.vectorstore import get_vectorstore
+from app.rag.vectorstore import get_vectorstore
 
 
 settings = get_settings()
