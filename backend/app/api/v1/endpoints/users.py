@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_auth_user
 from app.db.database import get_db
 from app.models.user import User
 
@@ -15,7 +15,7 @@ router = APIRouter(
 
 @router.get("/me")
 def get_my_profile(
-    current_user=Depends(get_current_user),
+    current_user=Depends(get_current_auth_user),
     db: Session = Depends(get_db),
 ):
     auth_user_id = current_user.get("sub")

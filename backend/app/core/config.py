@@ -32,7 +32,8 @@ class Settings(BaseSettings):
     # RAG
     top_k: int = 5
     max_retries: int = 2
-
+    
+    supabase_jwks_url: str = ""
     # Supabase
     supabase_url: str = ""
     supabase_secret_key: str = ""
