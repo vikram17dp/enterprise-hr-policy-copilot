@@ -14,7 +14,9 @@ router = APIRouter(
 
 @router.get("/me")
 def get_me(
-    current_auth_user=Depends(get_current_auth_user),
+    current_auth_user=Depends(
+        get_current_auth_user
+    ),
 ):
     return {
         "auth_user_id": current_auth_user.get("sub"),
@@ -24,7 +26,9 @@ def get_me(
 
 @router.post("/sync-user")
 def sync_user(
-    current_auth_user=Depends(get_current_auth_user),
+    current_auth_user=Depends(
+        get_current_auth_user
+    ),
     db: Session = Depends(get_db),
 ):
     auth_user_id = current_auth_user.get("sub")

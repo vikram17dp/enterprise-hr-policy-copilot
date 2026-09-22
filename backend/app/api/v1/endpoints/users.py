@@ -15,7 +15,9 @@ router = APIRouter(
 
 @router.get("/me")
 def get_my_profile(
-    current_user=Depends(get_current_auth_user),
+    current_user=Depends(
+        get_current_auth_user
+    ),
     db: Session = Depends(get_db),
 ):
     auth_user_id = current_user.get("sub")

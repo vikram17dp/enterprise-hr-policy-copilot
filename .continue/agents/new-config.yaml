@@ -1,12 +1,56 @@
-name: Local Ollama Config
+name: Local Models
 version: 1.0.0
 schema: v1
 
 models:
-  - name: Qwen2.5-Coder 3B
+  # =========================
+  # OLLAMA MODELS
+  # =========================
+
+  - name: Ollama - Qwen2.5-Coder 3B
     provider: ollama
     model: qwen2.5-coder:3b
     apiBase: http://localhost:11434
+    roles:
+      - chat
+      - edit
+      - autocomplete
+
+  - name: Ollama - Qwen2.5-Coder 7B
+    provider: ollama
+    model: qwen2.5-coder:7b
+    apiBase: http://localhost:11434
+    roles:
+      - chat
+      - edit
+      - autocomplete
+
+  - name: Ollama - Qwen3 4B
+    provider: ollama
+    model: qwen3:4b
+    apiBase: http://localhost:11434
+    roles:
+      - chat
+      - edit
+
+
+  # =========================
+  # LM STUDIO MODELS
+  # =========================
+
+  - name: LM Studio - Qwen3.5-9B
+    provider: openai
+    model: qwen3.5-9b
+    apiBase: http://localhost:1234/v1
+    roles:
+      - chat
+      - edit
+      - autocomplete
+
+  - name: LM Studio - DeepSeek-R1-0528-Qwen3-8B
+    provider: openai
+    model: deepseek-r1-0528-qwen3-8b
+    apiBase: http://localhost:1234/v1
     roles:
       - chat
       - edit
