@@ -1,14 +1,5 @@
-import { apiFetch, withMockFallback } from "@/lib/api/client";
+import { apiFetch } from "@/lib/api/client";
 import { API_V1 } from "@/lib/utils/constants";
-import {
-  addMockSavedAnswer,
-  deleteMockConversation,
-  getMockChatAnswer,
-  getMockConversations,
-  getMockSavedAnswers,
-  mockId,
-  removeMockSavedAnswer,
-} from "@/lib/api/mockData";
 import type {
   ChatAnswer,
   ConversationDetail,
@@ -28,142 +19,71 @@ export interface SaveAnswerInput {
 /* --------------------------------- ask ---------------------------------- */
 
 /**
- * POST /api/v1/chat/ask — NOT implemented yet.
- * Runs the agentic RAG workflow and returns { answer, source_used, citations }.
+ * POST /api/v1/chat/ask — runs the real agentic RAG workflow
+ * (intent classification -> Pinecone retrieval -> grounded LLM answer).
+ * Returns { answer, conversation_id, message_id, source_used, intent,
+ * requires_employee_data, requires_action, citations, sources }.
  */
 export async function askQuestion(
-  question: string,
+  message: string,
   conversationId?: string | null
 ): Promise<ChatAnswer> {
-  return withMockFallback(
-    "POST /chat/ask",
-    async () =>
-      (await apiFetch(`${API_V1}/chat/ask`, {
-        method: "POST",
-        body: JSON.stringify({
-          question,
-          conversation_id: conversationId ?? undefined,
-        }),
-      })) as ChatAnswer,
-    async () => {
-      // Simulate a short "thinking" latency for a realistic UI.
-      await new Promise((r) => setTimeout(r, 700));
-      return getMockChatAnswer(question);
-    }
-  );
+  return (await apiFetch(`${API_V1}/chat/ask`, {
+    method: "POST",
+    body: JSON.stringify({
+      message,
+      conversation_id: conversationId ?? undefined,
+    }),
+  })) as ChatAnswer;
 }
 
 /* ----------------------------- conversations ---------------------------- */
 
-/** GET /api/v1/conversations — NOT implemented yet. */
+/** GET /api/v1/conversations */
 export async function getConversations(): Promise<ConversationSummary[]> {
-  return withMockFallback(
-    "GET /conversations",
-    async () =>
-      (await apiFetch(`${API_V1}/conversations`, {
-        method: "GET",
-      })) as ConversationSummary[],
-    () => getMockConversations()
-  );
+  return (await apiFetch(`${API_V1}/conversations`, {
+    method: "GET",
+  })) as ConversationSummary[];
 }
 
-/** GET /api/v1/conversations/{id} — NOT implemented yet. */
+/** GET /api/v1/conversations/{id} */
 export async function getConversation(
   id: string
 ): Promise<ConversationDetail> {
-  return withMockFallback(
-    `GET /conversations/${id}`,
-    async () =>
-      (await apiFetch(`${API_V1}/conversations/${id}`, {
-        method: "GET",
-      })) as ConversationDetail,
-    () => {
-      const summary = getMockConversations().find((c) => c.id === id);
-      const base = summary ?? {
-        id,
-        title: "Conversation",
-        lastQuestion: null,
-        messageCount: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        status: "active" as const,
-      };
-
-      return {
-        ...base,
-        messages: base.lastQuestion
-          ? [
-              {
-                id: mockId("msg"),
-                role: "user",
-                content: base.lastQuestion,
-                createdAt: base.createdAt,
-                status: "complete",
-              },
-            ]
-          : [],
-      } satisfies ConversationDetail;
-    }
-  );
+  return (await apiFetch(`${API_V1}/conversations/${id}`, {
+    method: "GET",
+  })) as ConversationDetail;
 }
 
-/** DELETE /api/v1/conversations/{id} — NOT implemented yet. */
+/** DELETE /api/v1/conversations/{id} */
 export async function deleteConversation(id: string): Promise<void> {
-  return withMockFallback(
-    `DELETE /conversations/${id}`,
-    async () => {
-      await apiFetch(`${API_V1}/conversations/${id}`, {
-        method: "DELETE",
-      });
-    },
-    () => deleteMockConversation(id)
-  );
+  await apiFetch(`${API_V1}/conversations/${id}`, {
+    method: "DELETE",
+  });
 }
 
 /* ----------------------------- saved answers ---------------------------- */
 
-/** GET /api/v1/saved-answers — NOT implemented yet. */
+/** GET /api/v1/saved-answers */
 export async function getSavedAnswers(): Promise<SavedAnswer[]> {
-  return withMockFallback(
-    "GET /saved-answers",
-    async () =>
-      (await apiFetch(`${API_V1}/saved-answers`, {
-        method: "GET",
-      })) as SavedAnswer[],
-    () => getMockSavedAnswers()
-  );
+  return (await apiFetch(`${API_V1}/saved-answers`, {
+    method: "GET",
+  })) as SavedAnswer[];
 }
 
-/** POST /api/v1/saved-answers — NOT implemented yet. */
+/** POST /api/v1/saved-answers */
 export async function saveAnswer(
   input: SaveAnswerInput
 ): Promise<SavedAnswer> {
-  return withMockFallback(
-    "POST /saved-answers",
-    async () =>
-      (await apiFetch(`${API_V1}/saved-answers`, {
-        method: "POST",
-        body: JSON.stringify(input),
-      })) as SavedAnswer,
-    () =>
-      addMockSavedAnswer({
-        question: input.question,
-        answer: input.answer,
-        source: input.source ?? null,
-        category: input.category ?? null,
-      })
-  );
+  return (await apiFetch(`${API_V1}/saved-answers`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  })) as SavedAnswer;
 }
 
-/** DELETE /api/v1/saved-answers/{id} — NOT implemented yet. */
+/** DELETE /api/v1/saved-answers/{id} */
 export async function removeSavedAnswer(id: string): Promise<void> {
-  return withMockFallback(
-    `DELETE /saved-answers/${id}`,
-    async () => {
-      await apiFetch(`${API_V1}/saved-answers/${id}`, {
-        method: "DELETE",
-      });
-    },
-    () => removeMockSavedAnswer(id)
-  );
+  await apiFetch(`${API_V1}/saved-answers/${id}`, {
+    method: "DELETE",
+  });
 }

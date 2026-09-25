@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     # RAG
     top_k: int = 5
     max_retries: int = 2
+    # Minimum normalized relevance (0-1) for a retrieved chunk to be kept as
+    # grounding evidence. A safety floor for larger knowledge bases; the sample
+    # KB chunks all score well above this.
+    retrieval_score_threshold: float = 0.35
     
     supabase_jwks_url: str = ""
     # Supabase

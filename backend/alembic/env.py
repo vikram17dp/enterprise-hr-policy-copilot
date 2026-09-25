@@ -14,6 +14,7 @@ from app.models import (
     Message,
     Feedback,
     AuditLog,
+    SavedAnswer,
 )
 
 config = context.config

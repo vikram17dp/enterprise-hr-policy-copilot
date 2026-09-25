@@ -124,6 +124,18 @@ export function ChatMessage({
           )}
         </div>
 
+        {/* Intent-specific limitation note (no raw backend detail shown) */}
+        {!isPending && !isError && (message.requiresEmployeeData || message.requiresAction) ? (
+          <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] leading-5 text-amber-800">
+            <AlertCircle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+            <span>
+              {message.requiresAction
+                ? "The copilot can explain HR policy but cannot submit requests or perform actions yet."
+                : "This reflects company policy only. Your personal leave balance and approvals are not available to the copilot yet — check the HR portal or contact HR."}
+            </span>
+          </div>
+        ) : null}
+
         {/* Citations */}
         {!isPending && !isError && message.citations && message.citations.length > 0 ? (
           <div className="mt-2 flex flex-wrap gap-1.5">

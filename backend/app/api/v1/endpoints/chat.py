@@ -1,0 +1,96 @@
+"""Chat endpoint — the single, real entry point for HR policy questions.
+
+POST /api/v1/chat/ask
+    Request:  { "message": str, "conversation_id"?: str }
+    Response: { "answer", "conversation_id", "message_id", "source_used",
+                "source_type", "intent", "requires_employee_data",
+                "requires_action",
+                "citations": [{ "title", "url", "type", "document",
+                                "chunk_id", "relevance_score", "domain"? }],
+                "sources":   [{ "title", "type", "url",
+                                "document"?, "chunk_id"?, "score"? |
+                                "domain"? }] }
+
+The answer is produced by the LangGraph agentic RAG workflow: semantic intent
+classification (HR_POLICY, EMPLOYEE_SPECIFIC, COMPANY_CALENDAR,
+EXTERNAL_GENERAL, ACTION_REQUEST, GENERAL_CONVERSATION, CLARIFICATION_NEEDED)
+-> the matching source (internal Pinecone KB, company calendar, or Tavily web
+search) -> grounded LLM generation. Web search runs ONLY for EXTERNAL_GENERAL,
+never as a fallback for an internal question. No mock data is ever returned;
+pipeline failures surface as HTTP 503.
+"""
+
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from app.core.dependencies import get_current_user
+from app.db.database import get_db
+from app.models.user import User
+from app.services.chat_service import (
+    RagUnavailableError,
+    ask_question,
+)
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(
+    prefix="/chat",
+    tags=["Chat"],
+)
+
+
+class ChatAskRequest(BaseModel):
+    message: str = Field(
+        ...,
+        min_length=1,
+        description="The employee's HR policy question.",
+    )
+    conversation_id: str | None = Field(
+        default=None,
+        description="Optional existing conversation id to continue.",
+    )
+
+
+@router.post("/ask")
+def chat_ask(
+    payload: ChatAskRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        return ask_question(
+            db=db,
+            user=current_user,
+            message=payload.message,
+            conversation_id=payload.conversation_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        )
+    except RagUnavailableError as exc:
+        logger.error("RAG unavailable: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "The HR knowledge service is temporarily unavailable. "
+                "Please try again in a moment."
+            ),
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unexpected error during chat ask")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unexpected error while processing your question.",
+        )

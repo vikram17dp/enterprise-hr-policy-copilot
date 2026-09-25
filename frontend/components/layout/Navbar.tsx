@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -70,6 +71,10 @@ export function Navbar({ onMenuClick }: NavbarProps) {
           aria-label="Help and support"
           title="Help & Support"
           render={<Link href="/feedback" />}
+          // Rendered as a Next.js <Link> (an <a>), not a native <button>.
+          // Base UI requires nativeButton={false} so it applies correct link
+          // semantics instead of expecting a real <button> element.
+          nativeButton={false}
           className="text-slate-500 hover:bg-slate-100 hover:text-slate-900"
         >
           <HelpCircle className="size-5" aria-hidden />
@@ -85,17 +90,19 @@ export function Navbar({ onMenuClick }: NavbarProps) {
           </DropdownMenuTrigger>
 
           <DropdownMenuContent align="end" className="min-w-56">
-            <DropdownMenuLabel className="px-2 py-1.5">
-              <span className="block text-sm font-medium text-slate-900">
-                {fullName || "Employee"}
-              </span>
-              <span className="block truncate text-xs font-normal text-slate-500">
-                {email}
-              </span>
-              <span className="mt-1 inline-block rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
-                {roleLabel}
-              </span>
-            </DropdownMenuLabel>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="px-2 py-1.5">
+                <span className="block text-sm font-medium text-slate-900">
+                  {fullName || "Employee"}
+                </span>
+                <span className="block truncate text-xs font-normal text-slate-500">
+                  {email}
+                </span>
+                <span className="mt-1 inline-block rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                  {roleLabel}
+                </span>
+              </DropdownMenuLabel>
+            </DropdownMenuGroup>
             <DropdownMenuSeparator />
 
             <DropdownMenuItem render={<Link href="/profile" />}>

@@ -48,10 +48,21 @@ export function useChat() {
 
       try {
         const result = await askQuestion(content, state.conversationId);
+
+        // Continue the same conversation for subsequent messages.
+        if (result.conversation_id) {
+          chatStore.setConversationId(result.conversation_id);
+        }
+
         chatStore.updateMessage(assistantId, {
           content: result.answer,
           citations: result.citations,
           sourceUsed: result.source_used,
+          serverId: result.message_id,
+          intent: result.intent,
+          sourceType: result.source_type,
+          requiresEmployeeData: result.requires_employee_data,
+          requiresAction: result.requires_action,
           status: "complete",
         });
       } catch (err) {
@@ -75,7 +86,7 @@ export function useChat() {
         source,
         category: null,
         conversationId: state.conversationId,
-        messageId: message.id,
+        messageId: message.serverId ?? null,
       });
       chatStore.updateMessage(message.id, { saved: true });
       return saved;

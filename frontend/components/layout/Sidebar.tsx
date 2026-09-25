@@ -12,6 +12,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -148,14 +149,16 @@ export function SidebarPanel({ onNavigate }: SidebarPanelProps) {
             side="top"
             className="min-w-56"
           >
-            <DropdownMenuLabel className="px-2 py-1.5">
-              <span className="block text-sm font-medium text-slate-900">
-                {fullName || "Employee"}
-              </span>
-              <span className="block truncate text-xs font-normal text-slate-500">
-                {email}
-              </span>
-            </DropdownMenuLabel>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="px-2 py-1.5">
+                <span className="block text-sm font-medium text-slate-900">
+                  {fullName || "Employee"}
+                </span>
+                <span className="block truncate text-xs font-normal text-slate-500">
+                  {email}
+                </span>
+              </DropdownMenuLabel>
+            </DropdownMenuGroup>
             <DropdownMenuSeparator />
 
             <DropdownMenuItem

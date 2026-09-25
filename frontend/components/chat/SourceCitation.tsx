@@ -24,6 +24,14 @@ function citationMeta(type: string) {
 export function SourceCitation({ citation, index }: SourceCitationProps) {
   const { label, Icon, className } = citationMeta(citation.type);
 
+  const rawScore =
+    typeof citation.relevance_score === "number"
+      ? citation.relevance_score
+      : typeof citation.score === "number"
+        ? citation.score
+        : null;
+  const relevance = rawScore !== null ? Math.round(rawScore * 100) : null;
+
   const content = (
     <>
       <span
@@ -35,6 +43,19 @@ export function SourceCitation({ citation, index }: SourceCitationProps) {
       <span className="truncate text-[13px] text-slate-600">
         {citation.title}
       </span>
+      {relevance !== null ? (
+        <span
+          className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500"
+          title="Relevance to your question"
+        >
+          {relevance}%
+        </span>
+      ) : null}
+      {citation.type === "web" && citation.domain ? (
+        <span className="shrink-0 text-[10px] font-medium text-slate-400">
+          {citation.domain}
+        </span>
+      ) : null}
       {citation.url ? (
         <ExternalLink className="size-3.5 shrink-0 text-slate-400" aria-hidden />
       ) : null}
