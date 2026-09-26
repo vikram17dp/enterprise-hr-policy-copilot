@@ -112,7 +112,8 @@ def ask_question(
         conversation_id=conversation.id,
         role="assistant",
         content=answer,
-        # `source` column is String(50); answer_source is kb/web/insufficient.
+        # `source` column is String(50); answer_source is one of
+        # INTERNAL_KB / WEB / INTERNAL_KB + WEB / insufficient.
         source=(answer_source[:50] if answer_source else None),
     )
 

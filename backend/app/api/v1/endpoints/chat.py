@@ -9,13 +9,15 @@ POST /api/v1/chat/ask
                                 "domain"? }] }
 
 The answer is produced by the LangGraph agentic RAG workflow — a fixed nine-node
-graph: Router -> Retrieve (Pinecone) -> Grade KB -> [sufficient: Generate KB
-Answer | insufficient: Tavily Web Search -> Grade Web -> (sufficient: Generate
-Web Answer | insufficient: Query Rewrite & Retry, bounded, back to Retrieve)] ->
-Final Answer. The private HR knowledge base is ALWAYS attempted before Tavily;
-Tavily is a fallback only. `answer_source` is one of "kb" | "web" |
-"insufficient". No mock data is ever returned; pipeline failures surface as
-HTTP 503.
+graph: Router (decompose the question into information requirements) -> Retrieve
+(Pinecone) -> Grade KB (per requirement) -> [supported/partial: Generate KB
+Answer, then Tavily only for still-missing PUBLIC requirements | all missing:
+Tavily or Query Rewrite & Retry] -> Grade Web (per requirement) -> Generate Web
+Answer -> Final Answer (merge KB + web + unresolved). The private HR knowledge
+base is ALWAYS attempted before Tavily; Tavily is a fallback used only for
+public/current requirements and never overrides company policy. `answer_source`
+is one of "INTERNAL_KB" | "WEB" | "INTERNAL_KB + WEB" | "insufficient". No mock
+data is ever returned; pipeline failures surface as HTTP 503.
 """
 
 import logging
