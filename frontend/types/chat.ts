@@ -1,9 +1,11 @@
 /**
  * Chat types mirror the backend RAG graph output.
- * See backend/app/rag/state.py (AgentState) and workflow.py which returns:
- *   { answer, intent, source_used, requires_employee_data, requires_action,
- *     citations: [{ title, url, type, document, chunk_id, relevance_score }],
- *     sources:   [{ document, chunk_id, relevance_score, type, url }] }
+ * See backend/app/rag/state.py (AgentState) and workflow.py — a fixed nine-node
+ * graph (Router -> Pinecone -> Grade KB -> [KB Answer | Tavily -> Grade Web ->
+ * (Web Answer | Rewrite & Retry)] -> Final Answer) which returns:
+ *   { answer, answer_source, source_used, execution_trace,
+ *     sources/citations: [{ title, type, url, document?, chunk_id?, score? |
+ *     domain? }] }
  */
 
 export type CitationType =
@@ -11,25 +13,8 @@ export type CitationType =
   | "web"
   | string;
 
-/** The closed set of intents the backend classifier can return. */
-export type ChatIntent =
-  | "HR_POLICY"
-  | "EMPLOYEE_SPECIFIC"
-  | "COMPANY_CALENDAR"
-  | "EXTERNAL_GENERAL"
-  | "ACTION_REQUEST"
-  | "GENERAL_CONVERSATION"
-  | "CLARIFICATION_NEEDED"
-  | string;
-
-/** Which source produced the answer. */
-export type SourceType =
-  | "internal_kb"
-  | "employee_data"
-  | "company_calendar"
-  | "web"
-  | "none"
-  | string;
+/** Where the final answer came from. */
+export type AnswerSourceKind = "kb" | "web" | "insufficient" | string;
 
 export interface Citation {
   title: string;
@@ -78,33 +63,26 @@ export interface ChatMessage {
   saved?: boolean;
   /** The persisted message id returned by the backend (assistant messages). */
   serverId?: string;
-  /** Classified intent for this answer (assistant messages). */
-  intent?: ChatIntent;
-  /** Which source produced the answer (assistant messages). */
-  sourceType?: SourceType;
-  /** True when a full answer needs the employee's own data (not yet available). */
-  requiresEmployeeData?: boolean;
-  /** True when the user asked the system to perform an action it cannot do yet. */
-  requiresAction?: boolean;
+  /** Where the answer came from: "kb" | "web" | "insufficient". */
+  answerSource?: AnswerSourceKind;
+  /** The workflow decision/execution trace (assistant messages). */
+  executionTrace?: string[];
 }
 
 /** Payload returned by POST /api/v1/chat/ask. */
 export interface ChatAnswer {
   answer: string;
+  /** Alias of answer_source kept for existing consumers. */
   source_used: string;
   citations: Citation[];
   /** Present so the client can continue the same conversation. */
   conversation_id?: string;
   /** The persisted assistant message id. */
   message_id?: string;
-  /** Classified intent. */
-  intent?: ChatIntent;
-  /** Which source produced the answer. */
-  source_type?: SourceType;
-  /** Whether a full answer needs employee-specific data not yet available. */
-  requires_employee_data?: boolean;
-  /** Whether the request needs an action the system cannot perform yet. */
-  requires_action?: boolean;
+  /** Where the answer came from: "kb" | "web" | "insufficient". */
+  answer_source?: AnswerSourceKind;
+  /** The workflow decision/execution trace. */
+  execution_trace?: string[];
   /** Precise contributing sources. */
   sources?: AnswerSource[];
 }

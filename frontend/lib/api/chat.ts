@@ -19,10 +19,11 @@ export interface SaveAnswerInput {
 /* --------------------------------- ask ---------------------------------- */
 
 /**
- * POST /api/v1/chat/ask — runs the real agentic RAG workflow
- * (intent classification -> Pinecone retrieval -> grounded LLM answer).
- * Returns { answer, conversation_id, message_id, source_used, intent,
- * requires_employee_data, requires_action, citations, sources }.
+ * POST /api/v1/chat/ask — runs the real agentic RAG workflow (a fixed nine-node
+ * LangGraph: Router -> Pinecone retrieve -> Grade KB -> [KB answer | Tavily web
+ * search -> Grade Web -> (web answer | rewrite & retry)] -> Final Answer).
+ * Returns { answer, conversation_id, message_id, answer_source, source_used,
+ * sources, citations, execution_trace }.
  */
 export async function askQuestion(
   message: string,

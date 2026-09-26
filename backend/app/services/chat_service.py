@@ -66,58 +66,6 @@ def _resolve_conversation(
     return conversation
 
 
-def _recent_history(
-    db: Session,
-    conversation: Conversation,
-    limit: int = 6,
-) -> list[dict]:
-    """Load a BOUNDED slice of prior turns for conversational context.
-
-    Used only to resolve references like "next week"/"that" during intent
-    classification. Never includes credentials or sensitive fields.
-    """
-    rows = db.execute(
-        select(Message)
-        .where(Message.conversation_id == conversation.id)
-        .order_by(Message.created_at.desc())
-        .limit(limit)
-    ).scalars().all()
-
-    # rows are newest-first; reverse to chronological order
-    history = [
-        {"role": m.role, "content": m.content}
-        for m in reversed(rows)
-    ]
-    return history
-
-
-def _public_sources(citations: list[dict]) -> list[dict]:
-    """Project citations down to the precise source metadata the frontend needs,
-    de-duplicated. Internal KB sources carry chunk_id + score; web sources carry
-    url + domain."""
-    sources: list[dict] = []
-    seen = set()
-    for c in citations or []:
-        key = c.get("chunk_id") or c.get("url") or c.get("title")
-        if not key or key in seen:
-            continue
-        seen.add(key)
-        source = {
-            "title": c.get("title"),
-            "type": c.get("type"),
-            "url": c.get("url") or None,
-        }
-        if c.get("type") == "web":
-            source["domain"] = c.get("domain")
-        else:
-            source["document"] = c.get("document") or c.get("title")
-            source["chunk_id"] = c.get("chunk_id")
-            source["score"] = c.get("relevance_score")
-        sources.append(source)
-    return sources
-
-
-
 def ask_question(
     db: Session,
     user: User,
@@ -127,7 +75,8 @@ def ask_question(
     """Run the real RAG pipeline for `message` and persist the exchange.
 
     Returns a dict matching the frontend contract:
-        { answer, conversation_id, message_id, source_used, citations }
+        { answer, conversation_id, message_id, answer_source, sources,
+          execution_trace }
     """
     question = (message or "").strip()
     if not question:
@@ -136,24 +85,18 @@ def ask_question(
     # Resolve ownership / create the conversation BEFORE spending RAG calls.
     conversation = _resolve_conversation(db, user.id, conversation_id)
 
-    # Bounded prior turns for conversational context (reference resolution).
-    history = _recent_history(db, conversation)
-
     # --- Real agentic RAG (LangGraph -> embeddings -> Pinecone -> LLM) ---
     try:
-        result = run_agent(question, history=history)
+        result = run_agent(question)
     except Exception as exc:  # noqa: BLE001 - mapped to 503 by the API layer
         db.rollback()
         logger.exception("RAG pipeline failed for user %s", user.id)
         raise RagUnavailableError(str(exc)) from exc
 
     answer = (result.get("answer") or "").strip()
-    source_used = result.get("source_used") or ""
-    source_type = result.get("source_type") or ""
-    citations = result.get("citations") or []
-    intent = result.get("intent") or ""
-    requires_employee_data = bool(result.get("requires_employee_data"))
-    requires_action = bool(result.get("requires_action"))
+    answer_source = result.get("answer_source") or "insufficient"
+    sources = result.get("sources") or []
+    execution_trace = result.get("execution_trace") or []
 
     if not answer:
         db.rollback()
@@ -169,8 +112,8 @@ def ask_question(
         conversation_id=conversation.id,
         role="assistant",
         content=answer,
-        # `source` column is String(50); source_used values are short slugs.
-        source=(source_used[:50] if source_used else None),
+        # `source` column is String(50); answer_source is kb/web/insufficient.
+        source=(answer_source[:50] if answer_source else None),
     )
 
     db.add(user_message)
@@ -187,11 +130,11 @@ def ask_question(
         "answer": answer,
         "conversation_id": str(conversation.id),
         "message_id": str(assistant_message.id),
-        "source_used": source_used,
-        "source_type": source_type,
-        "intent": intent,
-        "requires_employee_data": requires_employee_data,
-        "requires_action": requires_action,
-        "citations": citations,
-        "sources": _public_sources(citations),
+        "answer_source": answer_source,
+        # `source_used` kept as an alias of answer_source for any existing
+        # consumers; `citations` mirrors `sources` for the frontend.
+        "source_used": answer_source,
+        "sources": sources,
+        "citations": sources,
+        "execution_trace": execution_trace,
     }

@@ -124,16 +124,21 @@ export function ChatMessage({
           )}
         </div>
 
-        {/* Intent-specific limitation note (no raw backend detail shown) */}
-        {!isPending && !isError && (message.requiresEmployeeData || message.requiresAction) ? (
-          <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] leading-5 text-amber-800">
-            <AlertCircle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-            <span>
-              {message.requiresAction
-                ? "The copilot can explain HR policy but cannot submit requests or perform actions yet."
-                : "This reflects company policy only. Your personal leave balance and approvals are not available to the copilot yet — check the HR portal or contact HR."}
-            </span>
-          </div>
+        {/* Execution / decision trace from the RAG workflow */}
+        {!isPending &&
+        !isError &&
+        message.executionTrace &&
+        message.executionTrace.length > 0 ? (
+          <details className="mt-2 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-1.5 text-[12px] leading-5 text-slate-600">
+            <summary className="cursor-pointer select-none font-medium text-slate-500">
+              How this answer was produced
+            </summary>
+            <ol className="mt-1.5 list-decimal space-y-0.5 pl-5">
+              {message.executionTrace.map((step, i) => (
+                <li key={`${step}-${i}`}>{step}</li>
+              ))}
+            </ol>
+          </details>
         ) : null}
 
         {/* Citations */}

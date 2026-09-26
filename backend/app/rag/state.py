@@ -1,3 +1,16 @@
+"""LangGraph state + structured-output models for the HR Policy Copilot.
+
+The workflow is a fixed 9-stage Agentic RAG graph:
+
+    Router -> Retrieve (Pinecone) -> Grade KB
+        -> [KB sufficient]  Generate KB Answer
+        -> [KB insufficient] Web Search (Tavily) -> Grade Web
+            -> [Web sufficient]  Generate Web Answer
+            -> [Web insufficient] Query Rewrite & Retry -> back to Retrieve
+
+The state carries ONLY what these stages need. No extra fields.
+"""
+
 from typing import List, Literal
 
 from typing_extensions import TypedDict
@@ -8,96 +21,75 @@ from langchain_core.documents import Document
 
 
 # ============================================================
-# INTENTS
+# ANSWER SOURCE
 # ============================================================
 
-# Canonical intent set for the HR Policy Copilot router. The retrieval source is
-# chosen from the semantic intent of the question — never from a keyword match.
-INTENT_HR_POLICY = "HR_POLICY"
-INTENT_EMPLOYEE = "EMPLOYEE_SPECIFIC"
-INTENT_CALENDAR = "COMPANY_CALENDAR"
-INTENT_EXTERNAL = "EXTERNAL_GENERAL"
-INTENT_ACTION = "ACTION_REQUEST"
-INTENT_GENERAL = "GENERAL_CONVERSATION"
-INTENT_CLARIFY = "CLARIFICATION_NEEDED"
+# Where the final answer came from (surfaced to the client + logs).
+ANSWER_SOURCE_KB = "kb"
+ANSWER_SOURCE_WEB = "web"
+ANSWER_SOURCE_INSUFFICIENT = "insufficient"
 
-IntentName = Literal[
-    "HR_POLICY",
-    "EMPLOYEE_SPECIFIC",
-    "COMPANY_CALENDAR",
-    "EXTERNAL_GENERAL",
-    "ACTION_REQUEST",
-    "GENERAL_CONVERSATION",
-    "CLARIFICATION_NEEDED",
-]
-
-# Intents answered from the internal company knowledge base (Pinecone).
-INTERNAL_INTENTS = (
-    INTENT_HR_POLICY,
-    INTENT_EMPLOYEE,
-    INTENT_CALENDAR,
-    INTENT_ACTION,
-)
-
-# Where an answer actually came from (surfaced to the client + logs).
-SOURCE_INTERNAL_KB = "internal_kb"
-SOURCE_EMPLOYEE_DATA = "employee_data"
-SOURCE_COMPANY_CALENDAR = "company_calendar"
-SOURCE_WEB = "web"
-SOURCE_NONE = "none"
+AnswerSource = Literal["kb", "web", "insufficient"]
 
 
-class IntentDecision(BaseModel):
-    """Structured output of the intent-classification step."""
+# ============================================================
+# STRUCTURED-OUTPUT MODELS
+# ============================================================
 
-    intent: IntentName = Field(
+
+class RouterDecision(BaseModel):
+    """NODE 1 — Router Agent output.
+
+    The router understands the employee's question and prepares the retrieval
+    query. It always routes to the private HR knowledge-base retrieval (there is
+    a single path out of the router — no multi-agent branching).
+    """
+
+    next_step: Literal["retrieve_kb"] = Field(
+        default="retrieve_kb",
         description=(
-            "Exactly one intent label for the user's message. "
-            "HR_POLICY = general company HR policy that applies to everyone. "
-            "EMPLOYEE_SPECIFIC = the user's OWN leave balance/usage/approval, or "
-            "whether THEY can take leave on/around a date. "
-            "COMPANY_CALENDAR = this company's official holidays/closed days. "
-            "EXTERNAL_GENERAL = public/general info not specific to this company "
-            "(festivals, public/statutory holidays, news, labor law). "
-            "ACTION_REQUEST = the user wants the system to perform an action "
-            "(apply/submit/create a leave request). "
-            "GENERAL_CONVERSATION = greeting/thanks/casual chat. "
-            "CLARIFICATION_NEEDED = the question is genuinely ambiguous between "
-            "these meanings and context cannot resolve it."
-        )
-    )
-    search_query: str = Field(
-        default="",
-        description=(
-            "A standalone, keyword-rich query for INTERNAL knowledge-base "
-            "retrieval, with conversational references and relative dates "
-            "resolved against today's date. Do not answer the question. May be "
-            "empty for GENERAL_CONVERSATION / CLARIFICATION_NEEDED / "
-            "EXTERNAL_GENERAL."
+            "The next stage in the workflow. The private HR knowledge base is "
+            "always attempted first, so this is always 'retrieve_kb'."
         ),
     )
-    clarification: str = Field(
-        default="",
+    current_query: str = Field(
         description=(
-            "Only when intent is CLARIFICATION_NEEDED: a single short, friendly "
-            "question that asks the user to disambiguate (e.g. company holidays "
-            "vs leave types vs personal balance). Empty otherwise."
+            "A standalone, keyword-rich retrieval query for the private HR "
+            "knowledge base, with conversational references and relative dates "
+            "resolved against today's date. Preserve the original intent. Do "
+            "not answer the question."
         ),
     )
 
 
 class EvidenceGrade(BaseModel):
-    grade: Literal["good", "weak"] = Field(
-        description="Whether the evidence is sufficient and directly relevant to answer the question"
+    """Structured grading decision used for BOTH the KB grader (NODE 3) and the
+    web grader (NODE 6). Graders decide sufficiency only — they never generate
+    the final answer."""
+
+    sufficient: bool = Field(
+        description=(
+            "True only when the evidence directly and sufficiently addresses the "
+            "question without guessing. False when it is unrelated, partial, "
+            "ambiguous, about a different topic, or requires information not "
+            "present in the evidence."
+        )
+    )
+    reason: str = Field(
+        default="",
+        description="A one-sentence justification for the sufficiency decision.",
+    )
+    confidence: float = Field(
+        default=0.0,
+        description="Confidence in the decision, from 0.0 to 1.0.",
     )
 
 
 class GroundedAnswer(BaseModel):
-    """Structured output of the grounded generation step.
+    """Structured output of a grounded generation step (NODE 4 / NODE 7).
 
     `used_chunks` lets the model declare which numbered evidence chunks actually
-    contributed to the answer, so we only cite sources genuinely used instead of
-    listing everything retrieved.
+    contributed, so we only cite sources genuinely used.
     """
 
     answer: str = Field(description="The grounded answer text for the user.")
@@ -110,58 +102,59 @@ class GroundedAnswer(BaseModel):
     )
 
 
+# ============================================================
+# GRAPH STATE
+# ============================================================
+
+
 class AgentState(TypedDict, total=False):
+    """Typed state for the 9-node Agentic RAG workflow. Contains only the fields
+    the workflow needs — no speculative extras."""
 
-    # Original user question
-    question: str
+    # The employee's original, unmodified question.
+    original_query: str
 
-    # Query currently being searched (may be rewritten/resolved)
+    # The query currently being searched (may be rewritten/resolved).
     current_query: str
 
-    # Classified intent (see INTENT_* constants)
-    intent: str
+    # NODE 2 — documents retrieved from Pinecone (relevance in metadata).
+    retrieved_documents: List[Document]
 
-    # Where the answer came from (see SOURCE_* constants)
-    source_type: str
+    # Formatted KB evidence string handed to the KB grader/generator.
+    kb_evidence: str
 
-    # Whether fully answering needs the employee's own data (not yet available)
-    requires_employee_data: bool
+    # NODE 3 — KB grading decision: {sufficient, reason, confidence}.
+    kb_grade: dict
 
-    # Whether the user asked the system to perform an action (not yet available)
-    requires_action: bool
-
-    # Clarifying question to return when intent is CLARIFICATION_NEEDED
-    clarification: str
-
-    # Current date (ISO) supplied by the backend for date interpretation
-    today: str
-
-    # Bounded prior conversation turns: [{ "role", "content" }]
-    history: List[dict]
-
-    # Retrieved Pinecone documents (relevance stored in metadata)
-    kb_docs: List[Document]
-
-    # Tavily search results
+    # NODE 5 — Tavily web search results.
     web_results: List[dict]
 
-    # KB evidence grade
-    kb_grade: str
+    # Formatted web evidence string handed to the web grader/generator.
+    web_evidence: str
 
-    # Web evidence grade
-    web_grade: str
+    # NODE 6 — web grading decision: {sufficient, reason, confidence}.
+    web_grade: dict
 
-    # Final answer
-    answer: str
+    # NODE 8 — the rewritten query produced during retry.
+    rewritten_query: str
 
-    # Where the answer came from (legacy slug, kept for message persistence)
-    source_used: str
-
-    # Number of query rewrites
+    # Number of query-rewrite retries performed so far.
     retry_count: int
 
-    # Debugging / execution trace
-    trace: List[str]
+    # Maximum allowed retries (prevents infinite loops).
+    max_retries: int
 
-    # Sources returned to frontend
-    citations: List[dict]
+    # Final answer text.
+    answer: str
+
+    # Sources/citations returned to the frontend.
+    sources: List[dict]
+
+    # Human-readable execution/decision trace.
+    execution_trace: List[str]
+
+    # Where the answer came from: "kb" | "web" | "insufficient".
+    answer_source: AnswerSource
+
+    # Non-fatal errors captured along the way (e.g. Tavily unavailable).
+    errors: List[str]

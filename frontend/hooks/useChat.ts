@@ -57,12 +57,10 @@ export function useChat() {
         chatStore.updateMessage(assistantId, {
           content: result.answer,
           citations: result.citations,
-          sourceUsed: result.source_used,
+          sourceUsed: result.answer_source ?? result.source_used,
+          answerSource: result.answer_source,
+          executionTrace: result.execution_trace,
           serverId: result.message_id,
-          intent: result.intent,
-          sourceType: result.source_type,
-          requiresEmployeeData: result.requires_employee_data,
-          requiresAction: result.requires_action,
           status: "complete",
         });
       } catch (err) {

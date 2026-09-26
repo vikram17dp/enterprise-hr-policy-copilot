@@ -2,22 +2,20 @@
 
 POST /api/v1/chat/ask
     Request:  { "message": str, "conversation_id"?: str }
-    Response: { "answer", "conversation_id", "message_id", "source_used",
-                "source_type", "intent", "requires_employee_data",
-                "requires_action",
-                "citations": [{ "title", "url", "type", "document",
-                                "chunk_id", "relevance_score", "domain"? }],
-                "sources":   [{ "title", "type", "url",
+    Response: { "answer", "conversation_id", "message_id", "answer_source",
+                "source_used", "execution_trace": [str],
+                "sources"/"citations": [{ "title", "type", "url",
                                 "document"?, "chunk_id"?, "score"? |
                                 "domain"? }] }
 
-The answer is produced by the LangGraph agentic RAG workflow: semantic intent
-classification (HR_POLICY, EMPLOYEE_SPECIFIC, COMPANY_CALENDAR,
-EXTERNAL_GENERAL, ACTION_REQUEST, GENERAL_CONVERSATION, CLARIFICATION_NEEDED)
--> the matching source (internal Pinecone KB, company calendar, or Tavily web
-search) -> grounded LLM generation. Web search runs ONLY for EXTERNAL_GENERAL,
-never as a fallback for an internal question. No mock data is ever returned;
-pipeline failures surface as HTTP 503.
+The answer is produced by the LangGraph agentic RAG workflow — a fixed nine-node
+graph: Router -> Retrieve (Pinecone) -> Grade KB -> [sufficient: Generate KB
+Answer | insufficient: Tavily Web Search -> Grade Web -> (sufficient: Generate
+Web Answer | insufficient: Query Rewrite & Retry, bounded, back to Retrieve)] ->
+Final Answer. The private HR knowledge base is ALWAYS attempted before Tavily;
+Tavily is a fallback only. `answer_source` is one of "kb" | "web" |
+"insufficient". No mock data is ever returned; pipeline failures surface as
+HTTP 503.
 """
 
 import logging
