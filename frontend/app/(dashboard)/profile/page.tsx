@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { KeyRound, LogOut, Mail, ShieldCheck, UserRound } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Camera, KeyRound, LogOut, Mail, ShieldCheck, UserRound } from "lucide-react";
 import { toast } from "sonner";
 
 import { PageHeader } from "@/components/shared/Header";
@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUser } from "@/hooks/useUser";
 import { useAuth } from "@/hooks/useAuth";
-import { updatePassword } from "@/lib/api/users";
+import { updatePassword, validateAvatarFile } from "@/lib/api/users";
 import { formatDate } from "@/lib/utils/formatDate";
 import { toErrorMessage } from "@/types/api";
 
@@ -23,11 +23,71 @@ const inputClass =
  * change password, and log out.
  */
 export default function ProfilePage() {
-  const { user, fullName, email, role, isLoading, updateProfile } =
+  const { user, fullName, email, role, avatarUrl, isLoading, updateProfile, changeAvatar } =
     useUser();
   const { signOut } = useAuth();
 
   const roleLabel = role === "admin" ? "Administrator" : "Employee";
+
+  // --- profile picture ---
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+
+  // Revoke the object URL when it is replaced or on unmount (no memory leak).
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
+  const resetFileSelection = () => {
+    setPreviewUrl(null);
+    setSelectedFile(null);
+    setAvatarError(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    const error = validateAvatarFile(file);
+    if (error || !file) {
+      setAvatarError(error ?? "Please choose an image file.");
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    setAvatarError(null);
+    setSelectedFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+  };
+
+  const handleUploadAvatar = async () => {
+    if (!selectedFile || uploading) return;
+
+    const error = validateAvatarFile(selectedFile);
+    if (error) {
+      setAvatarError(error);
+      return;
+    }
+
+    setUploading(true);
+    setAvatarError(null);
+    try {
+      await changeAvatar(selectedFile);
+      toast.success("Profile picture updated");
+      resetFileSelection();
+    } catch (err) {
+      const message = toErrorMessage(err);
+      setAvatarError(message);
+      toast.error("Unable to upload picture", { description: message });
+    } finally {
+      setUploading(false);
+    }
+  };
 
   // --- name form ---
   const [name, setName] = useState(fullName);
@@ -124,9 +184,60 @@ export default function ProfilePage() {
               <UserAvatar
                 name={fullName}
                 email={email}
+                src={previewUrl ?? avatarUrl}
                 size="lg"
                 className="mx-auto size-20 text-lg"
               />
+
+              {/* Change photo: file picker -> preview -> confirm upload */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <div className="mt-3 flex items-center justify-center gap-2">
+                {previewUrl ? (
+                  <>
+                    <Button
+                      type="button"
+                      disabled={uploading}
+                      onClick={() => void handleUploadAvatar()}
+                      className="h-9 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {uploading ? "Uploading..." : "Upload photo"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      disabled={uploading}
+                      onClick={resetFileSelection}
+                      className="h-9 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-100"
+                    >
+                      Cancel
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isLoading || uploading}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="h-9 gap-1.5 rounded-lg border-slate-300 px-3.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <Camera className="size-4" aria-hidden />
+                    Change Photo
+                  </Button>
+                )}
+              </div>
+
+              {avatarError ? (
+                <p className="mt-2 text-xs font-medium text-red-600">
+                  {avatarError}
+                </p>
+              ) : null}
+
               <h2 className="mt-4 text-base font-semibold text-slate-900">
                 {fullName || "Employee"}
               </h2>

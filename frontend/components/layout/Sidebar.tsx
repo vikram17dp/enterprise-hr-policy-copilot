@@ -35,7 +35,7 @@ interface SidebarPanelProps {
  */
 export function SidebarPanel({ onNavigate }: SidebarPanelProps) {
   const pathname = usePathname();
-  const { fullName, email, role } = useUser();
+  const { fullName, email, role, avatarUrl } = useUser();
   const { signOut } = useAuth();
 
   const roleLabel = role === "admin" ? "Administrator" : "Employee";
@@ -127,6 +127,7 @@ export function SidebarPanel({ onNavigate }: SidebarPanelProps) {
             <UserAvatar
               name={fullName}
               email={email}
+              src={avatarUrl}
               tone="dark"
               size="sm"
             />
@@ -183,7 +184,10 @@ export function SidebarPanel({ onNavigate }: SidebarPanelProps) {
 
             <DropdownMenuItem
               variant="destructive"
-              render={<button type="button" onClick={() => void signOut()} />}
+              // See Navbar: `Menu.Item` is non-<button> by default, so use
+              // onClick rather than `render={<button/>}` to avoid the Base UI
+              // nativeButton warning while keeping identical behavior.
+              onClick={() => void signOut()}
             >
               <LogOut className="size-4" aria-hidden />
               Log out

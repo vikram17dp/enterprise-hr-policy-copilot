@@ -55,3 +55,40 @@ export async function apiFetch(
 
   return data;
 }
+
+/**
+ * Authenticated multipart/form-data upload for the FastAPI backend.
+ *
+ * Same auth + error handling as `apiFetch`, but it deliberately does NOT set a
+ * Content-Type header — the browser must generate the `multipart/form-data`
+ * boundary itself. Used for the profile-picture (Cloudinary) upload.
+ */
+export async function apiUpload(endpoint: string, formData: FormData) {
+  const supabase = createClient();
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const headers = new Headers();
+
+  if (session?.access_token) {
+    headers.set("Authorization", `Bearer ${session.access_token}`);
+  }
+
+  const response = await fetch(`${API_URL}${endpoint}`, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.detail || "Upload failed. Please try again."
+    );
+  }
+
+  return data;
+}

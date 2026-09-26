@@ -13,6 +13,11 @@ export interface UserProfile {
   full_name: string | null;
   role: UserRole;
   /**
+   * Cloudinary secure URL of the user's profile picture, or null when they
+   * have not uploaded one (the UI then shows the initials fallback).
+   */
+  avatar_url?: string | null;
+  /**
    * Present on the `users` table but not yet returned by GET /users/me.
    * Optional so the profile UI can show it once the backend exposes it.
    */

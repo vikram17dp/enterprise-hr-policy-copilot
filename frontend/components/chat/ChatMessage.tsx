@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/shared/Avatar";
 import { SourceCitation } from "@/components/chat/SourceCitation";
+import { MarkdownContent } from "@/components/chat/MarkdownContent";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { useUser } from "@/hooks/useUser";
 import { cn } from "@/lib/utils/cn";
@@ -118,9 +119,7 @@ export function ChatMessage({
               </p>
             </div>
           ) : (
-            <p className="whitespace-pre-wrap break-words text-slate-700">
-              {message.content}
-            </p>
+            <MarkdownContent content={message.content} />
           )}
         </div>
 

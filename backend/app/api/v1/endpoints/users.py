@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+import logging
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -13,12 +15,22 @@ from app.models.document import Document
 from app.models.message import Message
 from app.models.saved_answer import SavedAnswer
 from app.models.user import User
+from app.services.cloudinary_service import (
+    delete_by_public_id,
+    upload_avatar,
+)
 
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/users",
     tags=["Users"],
 )
+
+# Profile-image upload limits (server-enforced; the client mirrors these).
+MAX_AVATAR_BYTES = 5 * 1024 * 1024  # 5 MB
+ALLOWED_AVATAR_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
 class UpdateProfile(BaseModel):
@@ -31,6 +43,7 @@ def _serialize_user(user: User) -> dict:
         "email": user.email,
         "full_name": user.full_name,
         "role": user.role,
+        "avatar_url": user.avatar_url,
     }
 
 
@@ -73,6 +86,75 @@ def update_my_profile(
     db.add(current_user)
     db.commit()
     db.refresh(current_user)
+
+    return _serialize_user(current_user)
+
+
+@router.post("/me/avatar")
+async def upload_my_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Upload/change the signed-in user's profile picture.
+
+    Flow: browser -> this endpoint -> Cloudinary -> store ONLY the secure URL
+    (+ public_id) on the user's own row -> return the updated profile.
+
+    Ownership: the row comes from the authenticated JWT (get_current_user), so a
+    user can only ever update their own avatar — no user id is accepted from the
+    request body. The Cloudinary API secret stays server-side.
+    """
+    # --- Validate before spending an upload ---
+    content_type = (file.content_type or "").lower()
+    if content_type not in ALLOWED_AVATAR_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported image type. Please upload a JPG, PNG, or WEBP.",
+        )
+
+    data = await file.read()
+
+    if not data:
+        raise HTTPException(status_code=400, detail="The selected file is empty.")
+
+    if len(data) > MAX_AVATAR_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail="Image is too large. Please choose a file under 5 MB.",
+        )
+
+    # --- Upload to Cloudinary (server-side credentials) ---
+    try:
+        result = upload_avatar(data)
+    except Exception as exc:  # noqa: BLE001 - do not leak internals to client
+        logger.exception("Cloudinary avatar upload failed for user %s", current_user.id)
+        raise HTTPException(
+            status_code=502,
+            detail="Could not upload the image. Please try again.",
+        ) from exc
+
+    previous_public_id = current_user.avatar_public_id
+
+    # --- Persist ONLY the Cloudinary URL / public_id ---
+    current_user.avatar_url = result["secure_url"]
+    current_user.avatar_public_id = result["public_id"]
+
+    db.add(current_user)
+    try:
+        db.commit()
+        db.refresh(current_user)
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        logger.exception("Failed to save avatar for user %s", current_user.id)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not save your profile picture. Please try again.",
+        ) from exc
+
+    # --- Best-effort cleanup of the OLD image, only after success ---
+    if previous_public_id and previous_public_id != result["public_id"]:
+        delete_by_public_id(previous_public_id)
 
     return _serialize_user(current_user)
 

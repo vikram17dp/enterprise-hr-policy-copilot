@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
-import { apiFetch } from "@/lib/api/client";
+import { apiFetch, apiUpload } from "@/lib/api/client";
 import { API_V1 } from "@/lib/utils/constants";
 import type { EmployeeStats, UserProfile } from "@/types/user";
 
@@ -51,4 +51,41 @@ export async function updatePassword(newPassword: string): Promise<void> {
   if (error) {
     throw new Error(error.message);
   }
+}
+
+/* ------------------------------- avatar -------------------------------- */
+
+/** Mirrors the server-side limits in backend/app/api/v1/endpoints/users.py. */
+export const MAX_AVATAR_BYTES = 5 * 1024 * 1024; // 5 MB
+export const ALLOWED_AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+/**
+ * Validate a candidate profile image on the client BEFORE uploading. Returns an
+ * error message string, or null when the file is acceptable. The backend
+ * re-validates authoritatively.
+ */
+export function validateAvatarFile(file: File | null | undefined): string | null {
+  if (!file) return "Please choose an image file.";
+  if (!ALLOWED_AVATAR_TYPES.includes(file.type)) {
+    return "Unsupported format. Please choose a JPG, PNG, or WEBP image.";
+  }
+  if (file.size > MAX_AVATAR_BYTES) {
+    return "Image is too large. Please choose a file under 5 MB.";
+  }
+  if (file.size === 0) {
+    return "The selected file is empty.";
+  }
+  return null;
+}
+
+/**
+ * POST /api/v1/users/me/avatar — uploads the image to the backend, which stores
+ * it in Cloudinary and saves ONLY the returned secure URL on the user's profile.
+ * Returns the updated profile.
+ */
+export async function uploadAvatar(file: File): Promise<UserProfile> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  return (await apiUpload(`${API_V1}/users/me/avatar`, formData)) as UserProfile;
 }

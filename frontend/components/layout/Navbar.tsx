@@ -34,7 +34,7 @@ interface NavbarProps {
  * the shared PageHeader.
  */
 export function Navbar({ onMenuClick }: NavbarProps) {
-  const { fullName, email, role } = useUser();
+  const { fullName, email, role, avatarUrl } = useUser();
   const { signOut } = useAuth();
 
   const roleLabel = role === "admin" ? "Administrator" : "Employee";
@@ -82,7 +82,7 @@ export function Navbar({ onMenuClick }: NavbarProps) {
 
         <DropdownMenu>
           <DropdownMenuTrigger className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50">
-            <UserAvatar name={fullName} email={email} size="sm" />
+            <UserAvatar name={fullName} email={email} src={avatarUrl} size="sm" />
             <span className="hidden text-sm font-medium text-slate-700 sm:block">
               {fullName || "Employee"}
             </span>
@@ -119,7 +119,12 @@ export function Navbar({ onMenuClick }: NavbarProps) {
 
             <DropdownMenuItem
               variant="destructive"
-              render={<button type="button" onClick={() => void signOut()} />}
+              // Base UI `Menu.Item` renders a non-<button> (role="menuitem") by
+              // default (nativeButton=false). Passing `render={<button/>}` made
+              // it a native <button> while nativeButton stayed false → the
+              // console warning. Use onClick on the item instead; it keeps the
+              // same click handler, keyboard activation, and menu semantics.
+              onClick={() => void signOut()}
             >
               <LogOut className="size-4" aria-hidden />
               Log out

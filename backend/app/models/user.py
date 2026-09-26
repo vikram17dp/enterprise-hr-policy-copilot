@@ -42,6 +42,20 @@ class User(Base):
         default="employee",
     )
 
+    # Cloudinary profile picture. Only the secure URL is stored here (the image
+    # binary lives in Cloudinary). `avatar_public_id` is kept so a replaced
+    # avatar's previous image can be deleted server-side after a successful
+    # new upload.
+    avatar_url: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+    )
+
+    avatar_public_id: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=datetime.utcnow,
