@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     # Infrastructure
     rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"
     redis_url: str = "redis://localhost:6379"
+    # TTL (seconds) for cached HR answers. Redis is an optional cache; a missing
+    # Redis never breaks the app (the RAG pipeline still runs).
+    redis_cache_ttl: int = 3600
 
     model_config = SettingsConfigDict(
         env_file=".env",

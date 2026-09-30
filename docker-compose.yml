@@ -1,0 +1,25 @@
+# Local development infrastructure for the Enterprise HR Policy Copilot.
+#
+# Redis is used as an OPTIONAL response cache for HR answers (see
+# backend/app/services/redis_service.py). The backend degrades gracefully if
+# Redis is down, so this service is for local development convenience.
+#
+# Do NOT expose Redis publicly in production. For local dev, localhost:6379 is
+# fine. Start with:  docker compose up -d redis
+services:
+  redis:
+    image: redis:latest
+    container_name: hr-copilot-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  redis_data:

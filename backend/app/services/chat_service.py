@@ -20,6 +20,7 @@ from app.models.conversation import Conversation
 from app.models.message import Message
 from app.models.user import User
 from app.rag.workflow import ask as run_agent
+from app.services.redis_service import RedisService, generate_cache_key
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,23 @@ logger = logging.getLogger(__name__)
 class RagUnavailableError(Exception):
     """The RAG pipeline could not produce an answer (external service down,
     missing credentials, index error, etc.)."""
+
+
+def _cacheable(result: dict) -> dict:
+    """Project a RAG result into the JSON-serializable subset we cache.
+
+    The full LangGraph state contains non-serializable objects (e.g. retrieved
+    ``Document`` instances), so we store only what is needed to rebuild the API
+    response body. Per-request DB artifacts (``conversation_id``/``message_id``)
+    are deliberately NOT cached — they are regenerated on every call so a cache
+    hit still returns the ids of the freshly persisted messages.
+    """
+    return {
+        "answer": result.get("answer") or "",
+        "answer_source": result.get("answer_source") or "insufficient",
+        "sources": result.get("sources") or [],
+        "execution_trace": result.get("execution_trace") or [],
+    }
 
 
 def _parse_conversation_id(conversation_id: str | None) -> uuid.UUID | None:
@@ -85,13 +103,26 @@ def ask_question(
     # Resolve ownership / create the conversation BEFORE spending RAG calls.
     conversation = _resolve_conversation(db, user.id, conversation_id)
 
-    # --- Real agentic RAG (LangGraph -> embeddings -> Pinecone -> LLM) ---
-    try:
-        result = run_agent(question)
-    except Exception as exc:  # noqa: BLE001 - mapped to 503 by the API layer
-        db.rollback()
-        logger.exception("RAG pipeline failed for user %s", user.id)
-        raise RagUnavailableError(str(exc)) from exc
+    # --- Redis response cache (sits BEFORE the expensive RAG pipeline) ---
+    # On a hit we skip query rewriting, embeddings, Pinecone retrieval, and the
+    # LLM entirely. Redis is optional: any failure degrades to a normal RAG run.
+    cache_key = generate_cache_key(question)
+    result = RedisService.get(cache_key)
+
+    if result is not None:
+        logger.info("CACHE HIT %s", cache_key)
+    else:
+        logger.info("CACHE MISS %s", cache_key)
+        # --- Real agentic RAG (LangGraph -> embeddings -> Pinecone -> LLM) ---
+        try:
+            result = run_agent(question)
+        except Exception as exc:  # noqa: BLE001 - mapped to 503 by the API layer
+            db.rollback()
+            logger.exception("RAG pipeline failed for user %s", user.id)
+            raise RagUnavailableError(str(exc)) from exc
+
+        # Cache the RAG output (non-fatal if Redis is unavailable).
+        RedisService.set(cache_key, _cacheable(result))
 
     answer = (result.get("answer") or "").strip()
     answer_source = result.get("answer_source") or "insufficient"

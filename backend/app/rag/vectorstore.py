@@ -5,6 +5,7 @@ from langchain_pinecone import PineconeVectorStore
 
 from app.core.config import get_settings
 from app.rag.embeddings import get_embeddings
+from app.services.redis_service import RedisService
 
 
 settings = get_settings()
@@ -58,4 +59,12 @@ def get_vectorstore():
 def add_documents(chunks):
     vectorstore = get_vectorstore()
 
-    return vectorstore.add_documents(chunks)
+    result = vectorstore.add_documents(chunks)
+
+    # The knowledge base changed, so previously cached HR answers may now be
+    # stale. Invalidate them (best-effort; Redis is an optional cache and this
+    # call never raises). For a full re-index you can also bump CACHE_VERSION in
+    # app/services/redis_service.py to invalidate everything at once.
+    RedisService.invalidate_answers()
+
+    return result
