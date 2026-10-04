@@ -43,4 +43,5 @@ class Message(Base):
         DateTime(timezone=True),
         default=datetime.utcnow,
         nullable=False,
+        index=True,
     )

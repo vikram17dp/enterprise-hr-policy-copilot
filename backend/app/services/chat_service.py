@@ -12,10 +12,12 @@ API layer can return a proper 503 instead of fake data.
 
 import logging
 import uuid
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.models.conversation import Conversation
 from app.models.message import Message
 from app.models.user import User
@@ -23,6 +25,8 @@ from app.rag.workflow import ask as run_agent
 from app.services.redis_service import RedisService, generate_cache_key
 
 logger = logging.getLogger(__name__)
+
+settings = get_settings()
 
 
 class RagUnavailableError(Exception):
@@ -84,6 +88,39 @@ def _resolve_conversation(
     return conversation
 
 
+def _recent_history(
+    db: Session, conversation_id: uuid.UUID, limit: int
+) -> list[dict]:
+    """Load the most recent messages of a conversation as LangGraph context.
+
+    Returns up to ``limit`` messages, OLDEST FIRST, as [{"role", "content"}].
+    Only persisted turns are included (the new user message is saved later), so
+    this is the conversation as it stood before the current question. A limit of
+    0 (history disabled) or a brand-new conversation yields []. Reads are
+    best-effort: any failure degrades to no history rather than breaking the ask.
+    """
+    if limit <= 0:
+        return []
+
+    try:
+        rows = db.execute(
+            select(Message.role, Message.content)
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.created_at.desc())
+            .limit(limit)
+        ).all()
+    except Exception:  # noqa: BLE001 - history is optional context
+        logger.warning("Could not load conversation history; continuing without it")
+        return []
+
+    # rows are newest-first; reverse to chronological order for the prompt.
+    return [
+        {"role": role, "content": content}
+        for role, content in reversed(rows)
+        if role and content
+    ]
+
+
 def ask_question(
     db: Session,
     user: User,
@@ -103,10 +140,17 @@ def ask_question(
     # Resolve ownership / create the conversation BEFORE spending RAG calls.
     conversation = _resolve_conversation(db, user.id, conversation_id)
 
+    # Recent conversation turns (oldest-first) used as LangGraph context so
+    # follow-up questions resolve correctly. Loaded before the new turn is saved.
+    history = _recent_history(
+        db, conversation.id, settings.chat_history_max_messages
+    )
+
     # --- Redis response cache (sits BEFORE the expensive RAG pipeline) ---
     # On a hit we skip query rewriting, embeddings, Pinecone retrieval, and the
-    # LLM entirely. Redis is optional: any failure degrades to a normal RAG run.
-    cache_key = generate_cache_key(question)
+    # LLM entirely. The key includes the history window because the answer now
+    # depends on it. Redis is optional: any failure degrades to a normal RAG run.
+    cache_key = generate_cache_key(question, history)
     result = RedisService.get(cache_key)
 
     if result is not None:
@@ -115,7 +159,7 @@ def ask_question(
         logger.info("CACHE MISS %s", cache_key)
         # --- Real agentic RAG (LangGraph -> embeddings -> Pinecone -> LLM) ---
         try:
-            result = run_agent(question)
+            result = run_agent(question, history)
         except Exception as exc:  # noqa: BLE001 - mapped to 503 by the API layer
             db.rollback()
             logger.exception("RAG pipeline failed for user %s", user.id)
@@ -153,6 +197,11 @@ def ask_question(
 
     if not conversation.title:
         conversation.title = question[:80].strip()
+
+    # Explicitly touch updated_at so the conversation moves to the top of the
+    # sidebar on every exchange (adding messages alone does not modify the
+    # conversations row, so the model's onupdate would not fire).
+    conversation.updated_at = datetime.utcnow()
 
     db.commit()
     db.refresh(conversation)

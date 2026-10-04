@@ -2,6 +2,7 @@ import { apiFetch } from "@/lib/api/client";
 import { API_V1 } from "@/lib/utils/constants";
 import type {
   ChatAnswer,
+  ChatMessage,
   ConversationDetail,
   ConversationSummary,
   SavedAnswer,
@@ -54,6 +55,33 @@ export async function getConversation(
   return (await apiFetch(`${API_V1}/conversations/${id}`, {
     method: "GET",
   })) as ConversationDetail;
+}
+
+/** GET /api/v1/conversations/{id}/messages */
+export async function getConversationMessages(
+  id: string
+): Promise<ChatMessage[]> {
+  return (await apiFetch(`${API_V1}/conversations/${id}/messages`, {
+    method: "GET",
+  })) as ChatMessage[];
+}
+
+/** POST /api/v1/conversations — create an empty conversation. */
+export async function createConversation(): Promise<ConversationSummary> {
+  return (await apiFetch(`${API_V1}/conversations`, {
+    method: "POST",
+  })) as ConversationSummary;
+}
+
+/** PATCH /api/v1/conversations/{id} — rename a conversation. */
+export async function renameConversation(
+  id: string,
+  title: string
+): Promise<ConversationSummary> {
+  return (await apiFetch(`${API_V1}/conversations/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ title }),
+  })) as ConversationSummary;
 }
 
 /** DELETE /api/v1/conversations/{id} */

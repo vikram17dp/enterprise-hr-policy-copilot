@@ -40,4 +40,5 @@ class Conversation(Base):
         default=datetime.utcnow,
         onupdate=datetime.utcnow,
         nullable=False,
+        index=True,
     )

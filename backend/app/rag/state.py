@@ -225,6 +225,15 @@ class AgentState(TypedDict, total=False):
     # The employee's original, unmodified question.
     original_query: str
 
+    # The most recent messages from the current conversation (already truncated
+    # to the configured limit), oldest first: [{"role": "user"|"assistant",
+    # "content": str}]. Used as conversational context so follow-up questions
+    # ("What about November?") resolve correctly. Empty for a new conversation.
+    chat_history: List[dict]
+
+    # `chat_history` rendered as a compact transcript string for prompts.
+    history_context: str
+
     # The query currently being searched in the KB (may be resolved/rewritten).
     current_query: str
 

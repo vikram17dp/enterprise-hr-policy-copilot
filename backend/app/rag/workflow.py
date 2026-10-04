@@ -131,6 +131,30 @@ def _errors(state: AgentState, message: str) -> list[str]:
     return [*state.get("errors", []), message]
 
 
+def _format_history(chat_history) -> str:
+    """Render the recent conversation as a compact transcript for prompts.
+
+    Bounded twice over: the caller already truncates to the latest N messages,
+    and each turn is clipped here so a single long answer cannot blow up the
+    prompt. Returns "(none)" for a new conversation. History is CONTEXT ONLY —
+    every prompt that receives it is instructed to answer from the retrieved
+    evidence, never from the transcript itself.
+    """
+    if not chat_history:
+        return "(none)"
+    lines = []
+    for turn in chat_history:
+        role = (turn.get("role") or "").strip()
+        content = (turn.get("content") or "").strip()
+        if not role or not content:
+            continue
+        if len(content) > 500:
+            content = content[:500] + "…"
+        label = "User" if role == "user" else "Assistant"
+        lines.append(f"{label}: {content}")
+    return "\n".join(lines) if lines else "(none)"
+
+
 def _doc_name(doc) -> str:
     source = doc.metadata.get("source") or "unknown"
     return os.path.basename(str(source))
@@ -299,6 +323,9 @@ def router(state: AgentState):
 
     question = state["original_query"]
     today = date.today().isoformat()
+    history = state.get("history_context") or _format_history(
+        state.get("chat_history")
+    )
 
     try:
         decision = llm().with_structured_output(
@@ -317,10 +344,19 @@ for the company's PRIVATE HR knowledge base. The private knowledge base is
 ALWAYS searched first; do not decide to skip it. Do NOT answer the question and
 do NOT rewrite the user's intent.
 
+Recent conversation (CONTEXT ONLY — use it to interpret the current question,
+never to answer it):
+{history}
+
 Decomposition rules:
 - A simple single-topic question yields exactly ONE requirement.
 - A MIXED question (company info + public/current info) yields one requirement
   per distinct information need.
+- If the current question is a FOLLOW-UP that relies on the recent conversation
+  (e.g. "What about November?", "And how many days?", "Do they apply to me?"),
+  resolve it against that conversation into a fully standalone requirement. For
+  example, after a question about company holidays in October, "What about
+  November?" becomes "company holidays in November {today[:4]}".
 
 Assign each requirement's `source`:
 - Company-specific HR policies, company holidays, company leave types/rules,
@@ -334,8 +370,8 @@ Assign each requirement's `source`:
 Rules for current_query (the KB retrieval query):
 - Build it from the INTERNAL_KB requirement topics. If there are no INTERNAL_KB
   requirements, build it from the whole question.
-- Resolve pronouns and relative dates (e.g. "recent", "next month") against
-  today's date.
+- Resolve pronouns, follow-ups, and relative dates (e.g. "recent", "next month")
+  against the recent conversation and today's date so the query is standalone.
 - Make it keyword-rich and self-contained for semantic retrieval.
 - Do NOT answer the question. Do NOT add outside facts.
 
@@ -654,6 +690,9 @@ def generate_kb_answer(state: AgentState):
     docs = state.get("retrieved_documents", [])
     evidence = state.get("kb_evidence") or _format_kb_documents(docs)
     today = date.today().isoformat()
+    history = state.get("history_context") or _format_history(
+        state.get("chat_history")
+    )
     answer_topics = state.get("kb_answer_requirements") or [
         s.get("topic", "") for s in state.get("supported_requirements", [])
     ]
@@ -695,6 +734,10 @@ Today's date: {today}
 
 RETRIEVED INTERNAL HR EVIDENCE (chunks are numbered):
 {evidence}
+
+Recent conversation (CONTEXT ONLY for continuity — never answer from it, and
+never treat it as evidence):
+{history}
 
 Original employee question (for context only):
 {state["original_query"]}
@@ -976,6 +1019,9 @@ def generate_web_answer(state: AgentState):
         "- The public/current part of the employee's question"
     )
     today = date.today().isoformat()
+    history = state.get("history_context") or _format_history(
+        state.get("chat_history")
+    )
 
     answer = llm().invoke(
         f"""
@@ -1004,6 +1050,9 @@ Rules:
    shown to the user separately as citations.
 
 Today's date: {today}
+
+Recent conversation (CONTEXT ONLY for continuity — never answer from it):
+{history}
 
 Original employee question (for context only):
 {state["original_query"]}
@@ -1142,6 +1191,9 @@ def _merge_answers(state: AgentState, kb_answer: str, web_answer: str,
     """
 
     question = state["original_query"]
+    history = state.get("history_context") or _format_history(
+        state.get("chat_history")
+    )
     unresolved_block = (
         "\n".join(f"- {m.get('topic', '')}" for m in unresolved if m.get("topic"))
         or "- (none)"
@@ -1168,6 +1220,9 @@ Rules:
 8. Answer every requirement independently.
 9. Do not mention internal system reasoning, retrieval, or debugging.
 10. Return concise Markdown only (no preamble).
+
+Recent conversation (CONTEXT ONLY for continuity — never answer from it):
+{history}
 
 Original question:
 {question}
@@ -1359,8 +1414,13 @@ agent_graph = build_graph()
 # ============================================================
 
 
-def ask(question: str):
+def ask(question: str, chat_history: list[dict] | None = None):
     """Run the 9-node Agentic RAG graph for a single question.
+
+    `chat_history` is the recent conversation (oldest first, already truncated
+    to the configured limit) as [{"role", "content"}]. It is used ONLY as
+    conversational context — to resolve follow-up questions and keep answers
+    coherent — never as a source of facts. Pass None/[] for a new conversation.
 
     Returns the final state, including:
         answer, sources, execution_trace,
@@ -1372,9 +1432,19 @@ def ask(question: str):
     if not question:
         raise ValueError("Question cannot be empty.")
 
+    # Defensive truncation to the configured window (the caller also truncates).
+    limit = max(0, int(settings.chat_history_max_messages))
+    history = [
+        {"role": t.get("role"), "content": t.get("content")}
+        for t in (chat_history or [])[-limit:]
+        if t.get("role") and t.get("content")
+    ] if limit else []
+
     initial: AgentState = {
         "original_query": question,
         "current_query": question,
+        "chat_history": history,
+        "history_context": _format_history(history),
         "requirements": [],
         "retrieved_documents": [],
         "kb_evidence": "",

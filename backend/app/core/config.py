@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     # grounding evidence. A safety floor for larger knowledge bases; the sample
     # KB chunks all score well above this.
     retrieval_score_threshold: float = 0.35
+
+    # Conversational context: how many of the most recent messages (user +
+    # assistant, combined) from the current conversation are handed to the
+    # LangGraph workflow as history. Bounded so we never send the entire
+    # conversation to the LLM. 0 disables history.
+    chat_history_max_messages: int = 6
     
     supabase_jwks_url: str = ""
     # Supabase

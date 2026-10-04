@@ -60,6 +60,19 @@ export const chatStore = {
     setState({ conversationId: id });
   },
 
+  /** Replace the whole message list (used when loading a saved conversation). */
+  setMessages(messages: ChatMessage[]): void {
+    setState({ messages });
+  },
+
+  /**
+   * Hydrate the store with an existing conversation (id + its messages) so an
+   * old chat can be opened and continued. Used on direct URL access / refresh.
+   */
+  loadConversation(conversationId: string | null, messages: ChatMessage[]): void {
+    setState({ conversationId, messages, isPending: false });
+  },
+
   reset(): void {
     setState({ messages: [], conversationId: null, isPending: false });
   },

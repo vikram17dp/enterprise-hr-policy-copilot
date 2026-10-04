@@ -27,7 +27,6 @@ import {
   deleteConversation,
   getConversations,
 } from "@/lib/api/chat";
-import { ASK_QUERY_PARAM } from "@/lib/utils/constants";
 import { formatRelativeTime } from "@/lib/utils/formatDate";
 import { toErrorMessage } from "@/types/api";
 import type { ConversationSummary } from "@/types/chat";
@@ -104,10 +103,8 @@ export default function ConversationsPage() {
   }, [conversations, debouncedSearch, statusFilter, sortKey]);
 
   const openConversation = (conversation: ConversationSummary) => {
-    const q = conversation.lastQuestion ?? conversation.title ?? "";
-    router.push(
-      q ? `/ask?${ASK_QUERY_PARAM}=${encodeURIComponent(q)}` : "/ask"
-    );
+    // Load the full conversation (all previous messages) at its permanent URL.
+    router.push(`/chat/${conversation.id}`);
   };
 
   const handleDelete = async (conversation: ConversationSummary) => {

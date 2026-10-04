@@ -25,12 +25,21 @@ settings = get_settings()
 
 
 # Bumping CACHE_VERSION invalidates every previously cached answer at once
-# (e.g. after a knowledge-base/policy refresh) without needing per-key deletes.
-CACHE_VERSION = "v1"
-KEY_PREFIX = f"hr:answer:{CACHE_VERSION}"
+# (e.g. after a knowledge-base/policy refresh, or when the key derivation
+# changes) without needing per-key deletes. v2 added conversation-history
+# awareness, so it must not collide with v1 (question-only) keys.
+CACHE_VERSION = "v2"
+# Base namespace shared by every version; used for SCAN-based invalidation so a
+# KB refresh clears old-version keys too.
+KEY_NAMESPACE = "hr:answer"
+KEY_PREFIX = f"{KEY_NAMESPACE}:{CACHE_VERSION}"
 
 # Collapse runs of whitespace so cosmetically-different questions share a key.
 _WHITESPACE = re.compile(r"\s+")
+
+# Separates the question from the history transcript inside the hashed payload.
+# A control character that never appears in natural question/answer text.
+_FIELD_SEP = "\x1f"
 
 
 def normalize_question(question: str) -> str:
@@ -38,24 +47,53 @@ def normalize_question(question: str) -> str:
     return _WHITESPACE.sub(" ", (question or "").strip().lower())
 
 
-def generate_cache_key(question: str) -> str:
-    """Deterministic cache key: ``hr:answer:<version>:<sha256(normalized)>``.
+def _normalize_history(chat_history) -> str:
+    """Canonical string for the recent-conversation window used as context.
 
-    The question is hashed (SHA-256) rather than stored verbatim, so the key is
-    fixed-length, URL/CLI-safe, and does not put raw HR questions into Redis key
-    space.
-
-    Scoping note: for this single-company deployment the RAG answer is a pure
-    function of the question — ``workflow.ask`` takes only the question, and no
-    per-user/role/tenant/personal data reaches the generated answer (personal
-    lookups resolve to a safe "insufficient" response regardless of caller). So
-    the key is scoped to the normalized question + a global cache version. If
-    per-user/role/tenant personalization is ever added to the answer, include
-    that context here so one user's answer is never served to another.
+    Only the ordered ``role: content`` turns matter (cosmetic whitespace/case is
+    normalized away). An empty/None history yields "" so a cold, context-free
+    question keeps a stable key shared across users and conversations.
     """
-    digest = hashlib.sha256(
-        normalize_question(question).encode("utf-8")
-    ).hexdigest()
+    if not chat_history:
+        return ""
+    parts = []
+    for turn in chat_history:
+        role = (turn.get("role") or "").strip().lower()
+        content = normalize_question(turn.get("content") or "")
+        if role and content:
+            parts.append(f"{role}:{content}")
+    return _FIELD_SEP.join(parts)
+
+
+def generate_cache_key(question: str, chat_history=None) -> str:
+    """Deterministic cache key: ``hr:answer:<version>:<sha256(question+history)>``.
+
+    The payload is hashed (SHA-256) rather than stored verbatim, so the key is
+    fixed-length, URL/CLI-safe, and never puts raw HR questions or conversation
+    content into Redis key space.
+
+    Scoping decision (why history — not user_id/conversation_id — is in the key):
+    the answer now depends on the recent conversation (``workflow.ask`` uses it to
+    resolve follow-ups), so two turns with the same text but different preceding
+    history can legitimately differ, and MUST NOT share a cache entry. Keying on
+    the *content* of the history window (rather than on user_id/conversation_id)
+    gives correctness without unnecessary fragmentation:
+
+      * Same question + same recent history  -> same key (correct HIT).
+      * Same question + different history    -> different key (no wrong answer).
+      * Cold question, empty history         -> one stable key shared by everyone
+        (the company-wide KB answer is identical), so no per-user duplication.
+
+    This is safe because no per-user private data reaches the generated answer:
+    personal lookups resolve to a safe "insufficient" response regardless of
+    caller, and the KB is company-wide. If per-user/role/tenant personalization
+    is ever added to the answer, add that identity to the payload here.
+    """
+    payload = normalize_question(question)
+    history = _normalize_history(chat_history)
+    if history:
+        payload = f"{payload}{_FIELD_SEP}{history}"
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
     return f"{KEY_PREFIX}:{digest}"
 
 
@@ -144,7 +182,7 @@ class RedisService:
         """
         deleted = 0
         try:
-            for key in redis_client.scan_iter(match=f"{KEY_PREFIX}:*", count=200):
+            for key in redis_client.scan_iter(match=f"{KEY_NAMESPACE}:*", count=200):
                 redis_client.delete(key)
                 deleted += 1
             logger.info("CACHE INVALIDATED %d HR answer key(s)", deleted)

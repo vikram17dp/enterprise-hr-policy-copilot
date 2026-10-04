@@ -3,7 +3,7 @@
 import { useCallback, useMemo } from "react";
 
 import { chatStore, useChatStore } from "@/store/chatStore";
-import { askQuestion, saveAnswer } from "@/lib/api/chat";
+import { askQuestion, getConversation, saveAnswer } from "@/lib/api/chat";
 import type { ChatMessage } from "@/types/chat";
 import { toErrorMessage } from "@/types/api";
 
@@ -94,6 +94,26 @@ export function useChat() {
 
   const reset = useCallback(() => chatStore.reset(), []);
 
+  /**
+   * Load a saved conversation (id + messages) into the store so an old chat can
+   * be opened, viewed, and continued. Used on direct URL access and refresh.
+   * Throws on error so the caller can show an error state.
+   */
+  const loadConversation = useCallback(async (id: string) => {
+    const detail = await getConversation(id);
+    const messages: ChatMessage[] = (detail.messages ?? []).map((m) => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      createdAt: m.createdAt,
+      status: m.status ?? "complete",
+      sourceUsed: m.sourceUsed,
+      serverId: m.role === "assistant" ? m.id : undefined,
+    }));
+    chatStore.loadConversation(detail.id, messages);
+    return detail;
+  }, []);
+
   return useMemo(
     () => ({
       messages: state.messages,
@@ -102,7 +122,8 @@ export function useChat() {
       send,
       save,
       reset,
+      loadConversation,
     }),
-    [state, send, save, reset]
+    [state, send, save, reset, loadConversation]
   );
 }

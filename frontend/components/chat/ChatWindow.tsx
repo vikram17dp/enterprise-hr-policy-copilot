@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { MessageSquareText, RotateCcw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
@@ -17,19 +18,91 @@ import { ChatInput } from "./ChatInput";
 interface ChatWindowProps {
   /** Prefills the composer (e.g. from the dashboard ?q= param). */
   initialQuery?: string;
+  /**
+   * The conversation to open, from the /chat/[conversationId] route. When set,
+   * its saved messages are loaded so the chat can be viewed and continued.
+   * Omit/null for a brand-new conversation on /ask.
+   */
+  conversationId?: string | null;
 }
 
 /**
  * The AI chat surface: empty state with examples, message list, and composer.
  * Owns chat state via the useChat hook and handles copy/save/feedback.
+ *
+ * Conversation persistence: when `conversationId` is provided (direct URL access
+ * or refresh) the saved messages are loaded from the backend; when the first
+ * message of a new chat creates a conversation, the URL is replaced with
+ * /chat/{id} so a refresh reloads the same conversation.
  */
-export function ChatWindow({ initialQuery }: ChatWindowProps) {
-  const { messages, isPending, send, save, reset } = useChat();
+export function ChatWindow({ initialQuery, conversationId }: ChatWindowProps) {
+  const {
+    messages,
+    isPending,
+    send,
+    save,
+    reset,
+    loadConversation,
+    conversationId: activeConversationId,
+  } = useChat();
+  const router = useRouter();
+  const pathname = usePathname();
 
   const [input, setInput] = useState(initialQuery ?? "");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Tracks which route conversation id has already been hydrated, so navigating
+  // /ask -> /chat/{id} right after creating a conversation does not reload (and
+  // wipe) the messages we just rendered.
+  const loadedRef = useRef<string | null | undefined>(undefined);
+
+  // Load the routed conversation (or start fresh on /ask).
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- loading/error are
+       driven by an async fetch that must start when the route id changes. */
+    const routeId = conversationId ?? null;
+    if (loadedRef.current === routeId) return;
+    loadedRef.current = routeId;
+
+    let cancelled = false;
+
+    if (routeId) {
+      // Already hydrated (e.g. just created from /ask) — keep in-memory messages.
+      if (routeId === activeConversationId && messages.length > 0) {
+        return;
+      }
+      setLoadingHistory(true);
+      setHistoryError(null);
+      loadConversation(routeId)
+        .catch((err) => {
+          if (!cancelled) setHistoryError(toErrorMessage(err));
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingHistory(false);
+        });
+    } else if (activeConversationId !== null || messages.length > 0) {
+      // Fresh /ask view: clear any previously opened conversation.
+      reset();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+    /* eslint-enable react-hooks/set-state-in-effect */
+    // Only re-run when the route's conversation id changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId]);
+
+  // After the first message creates a conversation on /ask, move to its
+  // permanent URL so a browser refresh reloads the same conversation.
+  useEffect(() => {
+    if (activeConversationId && pathname === "/ask") {
+      router.replace(`/chat/${activeConversationId}`);
+    }
+  }, [activeConversationId, pathname, router]);
 
   // Keep the newest message in view.
   useEffect(() => {
@@ -43,6 +116,14 @@ export function ChatWindow({ initialQuery }: ChatWindowProps) {
     setInput("");
     void send(text);
   }, [input, isPending, send]);
+
+  const handleNewChat = useCallback(() => {
+    reset();
+    setInput("");
+    setHistoryError(null);
+    loadedRef.current = null;
+    if (pathname !== "/ask") router.push("/ask");
+  }, [reset, pathname, router]);
 
   const handleCopy = useCallback(async (message: ChatMessageType) => {
     try {
@@ -128,10 +209,7 @@ export function ChatWindow({ initialQuery }: ChatWindowProps) {
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => {
-              reset();
-              setInput("");
-            }}
+            onClick={handleNewChat}
             className="gap-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
           >
             <RotateCcw className="size-3.5" aria-hidden />
@@ -140,9 +218,43 @@ export function ChatWindow({ initialQuery }: ChatWindowProps) {
         ) : null}
       </div>
 
-      {/* Messages / empty state */}
+      {/* Messages / loading / error / empty state */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        {hasMessages ? (
+        {loadingHistory ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 py-10 text-center">
+            <span className="size-6 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600" />
+            <p className="text-sm text-slate-500">Loading conversation…</p>
+          </div>
+        ) : historyError ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 py-10 text-center">
+            <p className="text-sm font-semibold text-slate-900">
+              Unable to load this conversation
+            </p>
+            <p className="max-w-sm text-sm text-slate-500">{historyError}</p>
+            <div className="mt-1 flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  loadedRef.current = undefined;
+                  setHistoryError(null);
+                  if (conversationId) void loadConversation(conversationId);
+                }}
+              >
+                Try again
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleNewChat}
+              >
+                Start new chat
+              </Button>
+            </div>
+          </div>
+        ) : hasMessages ? (
           <div className="space-y-6 p-4 sm:p-6">
             {messages.map((message) => (
               <ChatMessage
