@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { History, MessageSquareText, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -77,11 +77,19 @@ export function ConversationSidebar() {
     useState<ConversationSummary | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Fetch-once guard: React StrictMode (default on in dev) runs mount effects
+  // twice, which used to fire two identical GET /conversations requests.
+  const didInitRef = useRef(false);
+  // Ids currently known to the rail; used to refetch only when the active
+  // conversation is one we have never seen (i.e. a brand-new conversation).
+  const idsRef = useRef<Set<string>>(new Set());
+
   const fetchConversations = useCallback(async () => {
     try {
       const data = await getConversations();
       // Backend already orders by updated_at DESC; keep that order.
       setConversations(data);
+      idsRef.current = new Set(data.map((c) => c.id));
       setError(null);
     } catch (err) {
       setError(toErrorMessage(err));
@@ -90,13 +98,21 @@ export function ConversationSidebar() {
     }
   }, []);
 
-  // Refetch when the route changes or a new conversation is created, so the rail
-  // stays in sync with the chat surface.
+  // Fetch exactly once per mount (StrictMode-safe).
   useEffect(() => {
-    // Async fetch-on-mount: setState runs only after the awaited request.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (didInitRef.current) return;
+    didInitRef.current = true;
     void fetchConversations();
-  }, [fetchConversations, pathname, activeId]);
+  }, [fetchConversations]);
+
+  // Refetch only when the store's active conversation is not in the list yet —
+  // i.e. a new conversation was just created by the chat flow. Route changes
+  // and re-selecting known conversations no longer trigger extra requests.
+  useEffect(() => {
+    if (activeId && !idsRef.current.has(activeId)) {
+      void fetchConversations();
+    }
+  }, [activeId, fetchConversations]);
 
   const grouped = useMemo(() => {
     const buckets: Record<Group, ConversationSummary[]> = {
@@ -117,6 +133,8 @@ export function ConversationSidebar() {
 
   const openConversation = useCallback(
     (id: string) => {
+      // TEMP-UI-DIAG (remove after verification): proves the clicked id.
+      console.log("[TEMP-UI-DIAG] Selected conversation:", id);
       if (pathname !== `/chat/${id}`) router.push(`/chat/${id}`);
     },
     [pathname, router]
@@ -152,6 +170,7 @@ export function ConversationSidebar() {
     try {
       await deleteConversation(deleteTarget.id);
       setConversations((prev) => prev.filter((c) => c.id !== deleteTarget.id));
+      idsRef.current.delete(deleteTarget.id);
       toast.success("Conversation deleted");
       // If the deleted conversation is open, return to a fresh chat.
       if (activeId === deleteTarget.id) {

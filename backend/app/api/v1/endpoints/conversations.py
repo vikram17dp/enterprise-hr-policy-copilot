@@ -260,19 +260,31 @@ def create_conversation(
 @router.get("/{conversation_id}/messages")
 def list_messages(
     conversation_id: str,
+    request: Request,  # TEMP-LATENCY-DIAG (remove after diagnosis)
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Return the messages of an owned conversation, oldest first."""
-    conversation = _get_owned_conversation(db, current_user, conversation_id)
+    # TEMP-LATENCY-DIAG (remove after diagnosis): per-phase timing.
+    _auth_ms = getattr(request.state, "diag_auth_ms", 0.0)
+    _verify_ms = getattr(request.state, "diag_verify_ms", 0.0)
+    _user_sel_ms = getattr(request.state, "diag_user_select_ms", 0.0)
+    _t0 = getattr(request.state, "diag_t0", time.perf_counter())
 
+    _t = time.perf_counter()
+    conversation = _get_owned_conversation(db, current_user, conversation_id)
+    _conv_ms = (time.perf_counter() - _t) * 1000.0
+
+    _t = time.perf_counter()
     messages = db.execute(
         select(Message)
         .where(Message.conversation_id == conversation.id)
         .order_by(Message.created_at.asc())
     ).scalars().all()
+    _msg_ms = (time.perf_counter() - _t) * 1000.0
 
-    return [
+    _t = time.perf_counter()
+    payload = [
         {
             "id": str(message.id),
             "role": message.role,
@@ -283,6 +295,24 @@ def list_messages(
         }
         for message in messages
     ]
+    _transform_ms = (time.perf_counter() - _t) * 1000.0
+
+    # TEMP-LATENCY-DIAG (remove after diagnosis)
+    _db_ms = _conv_ms + _msg_ms
+    _total_ms = (time.perf_counter() - _t0) * 1000.0
+    _diag(
+        f"[CONVERSATION_MESSAGES] auth: {_auth_ms:.0f} ms / supabase:"
+        f" {_db_ms:.0f} ms / transform: {_transform_ms:.0f} ms / total:"
+        f" {_total_ms:.0f} ms"
+    )
+    _diag(
+        f"[CONVERSATION_MESSAGES][detail] jwks_verify: {_verify_ms:.0f} ms /"
+        f" user_select(incl pool checkout+pre_ping): {_user_sel_ms:.0f} ms /"
+        f" ownership_select: {_conv_ms:.0f} ms / messages_select(ASC):"
+        f" {_msg_ms:.0f} ms / queries: 3 / messages: {len(messages)}"
+    )
+
+    return payload
 
 
 @router.patch("/{conversation_id}")

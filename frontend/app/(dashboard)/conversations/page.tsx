@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { History, MessageSquareText, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -56,6 +56,9 @@ export default function ConversationsPage() {
     useState<ConversationSummary | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // StrictMode (default on in dev) runs mount effects twice; fetch only once.
+  const didInitRef = useRef(false);
+
   const fetchData = useCallback(async () => {
     try {
       const data = await getConversations();
@@ -74,8 +77,8 @@ export default function ConversationsPage() {
   }, [fetchData]);
 
   useEffect(() => {
-    // Async fetch-on-mount: setState runs only after the awaited request.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (didInitRef.current) return;
+    didInitRef.current = true;
     void fetchData();
   }, [fetchData]);
 

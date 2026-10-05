@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useChat } from "@/hooks/useChat";
 import { submitFeedback } from "@/lib/api/feedback";
+import { chatStore } from "@/store/chatStore";
 import { ASK_EXAMPLES } from "@/lib/utils/constants";
 import { toErrorMessage } from "@/types/api";
 import type { ChatMessage as ChatMessageType } from "@/types/chat";
@@ -42,7 +43,7 @@ export function ChatWindow({ initialQuery, conversationId }: ChatWindowProps) {
     send,
     save,
     reset,
-    loadConversation,
+    fetchConversation,
     conversationId: activeConversationId,
   } = useChat();
   const router = useRouter();
@@ -56,45 +57,68 @@ export function ChatWindow({ initialQuery, conversationId }: ChatWindowProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   // Tracks which route conversation id has already been hydrated, so navigating
   // /ask -> /chat/{id} right after creating a conversation does not reload (and
-  // wipe) the messages we just rendered.
+  // wipe) the messages we just rendered, and so React StrictMode's double effect
+  // run does not fire a second fetch.
   const loadedRef = useRef<string | null | undefined>(undefined);
+  // Mirrors the conversation the UI is currently showing. Async responses compare
+  // against it so a late response for a conversation the user already left can
+  // neither overwrite the store nor clear/stray the loading state (this is what
+  // previously left the UI stuck on "Loading conversation..." under StrictMode).
+  const routeIdRef = useRef<string | null>(null);
+  // Bumped by the retry button to re-run the load effect.
+  const [reloadNonce, setReloadNonce] = useState(0);
+
+  const startLoad = useCallback(
+    (routeId: string) => {
+      setLoadingHistory(true);
+      setHistoryError(null);
+      fetchConversation(routeId)
+        .then(({ id, messages: loaded }) => {
+          // Race guard: the user may have switched conversations while this
+          // request was in flight — only apply the response if it is still the
+          // selected conversation.
+          if (routeIdRef.current !== id) return;
+          chatStore.loadConversation(id, loaded);
+        })
+        .catch((err) => {
+          if (routeIdRef.current !== routeId) return;
+          setHistoryError(toErrorMessage(err));
+        })
+        .finally(() => {
+          // Always end the loading state for the conversation still selected,
+          // on success AND on error. No cleanup flag is involved, so StrictMode
+          // remounts can no longer strand the spinner.
+          if (routeIdRef.current === routeId) setLoadingHistory(false);
+        });
+    },
+    [fetchConversation]
+  );
 
   // Load the routed conversation (or start fresh on /ask).
   useEffect(() => {
-    /* eslint-disable react-hooks/set-state-in-effect -- loading/error are
-       driven by an async fetch that must start when the route id changes. */
+    /* eslint-disable react-hooks/set-state-in-effect -- loading/error/reset
+       are driven by an async fetch that must start when the route id changes. */
     const routeId = conversationId ?? null;
+    routeIdRef.current = routeId;
+    // TEMP-UI-DIAG (remove after verification): proves which id the UI selected.
+    console.log("[TEMP-UI-DIAG] selected conversation:", routeId);
     if (loadedRef.current === routeId) return;
     loadedRef.current = routeId;
-
-    let cancelled = false;
 
     if (routeId) {
       // Already hydrated (e.g. just created from /ask) — keep in-memory messages.
       if (routeId === activeConversationId && messages.length > 0) {
         return;
       }
-      setLoadingHistory(true);
-      setHistoryError(null);
-      loadConversation(routeId)
-        .catch((err) => {
-          if (!cancelled) setHistoryError(toErrorMessage(err));
-        })
-        .finally(() => {
-          if (!cancelled) setLoadingHistory(false);
-        });
+      startLoad(routeId);
     } else if (activeConversationId !== null || messages.length > 0) {
       // Fresh /ask view: clear any previously opened conversation.
       reset();
     }
-
-    return () => {
-      cancelled = true;
-    };
     /* eslint-enable react-hooks/set-state-in-effect */
-    // Only re-run when the route's conversation id changes.
+    // Only re-run when the route's conversation id changes (or manual retry).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId]);
+  }, [conversationId, reloadNonce]);
 
   // After the first message creates a conversation on /ask, move to its
   // permanent URL so a browser refresh reloads the same conversation.
@@ -239,7 +263,7 @@ export function ChatWindow({ initialQuery, conversationId }: ChatWindowProps) {
                 onClick={() => {
                   loadedRef.current = undefined;
                   setHistoryError(null);
-                  if (conversationId) void loadConversation(conversationId);
+                  setReloadNonce((n) => n + 1);
                 }}
               >
                 Try again
