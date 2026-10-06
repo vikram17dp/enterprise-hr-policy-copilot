@@ -6,6 +6,12 @@ import {
   FileText,
   LifeBuoy,
   User as UserIcon,
+  MessagesSquare,
+  Users,
+  Files,
+  Settings,
+  ScrollText,
+  BarChart3,
   type LucideIcon,
 } from "lucide-react";
 
@@ -73,6 +79,60 @@ export const EMPLOYEE_NAV: NavItem[] = [
   },
 ];
 
+/**
+ * Admin navigation for the /admin area. Rendered by AdminSidebar.
+ */
+export const ADMIN_NAV: NavItem[] = [
+  {
+    label: "Dashboard",
+    href: "/admin",
+    icon: LayoutDashboard,
+    description: "System overview, key metrics, and recent activity.",
+  },
+  {
+    label: "Employee Queries",
+    href: "/admin/queries",
+    icon: MessagesSquare,
+    description: "Review, triage, and respond to employee HR queries.",
+  },
+  {
+    label: "User Management",
+    href: "/admin/users",
+    icon: Users,
+    description: "Manage employee accounts, roles, and access status.",
+  },
+  {
+    label: "Policy Documents",
+    href: "/admin/policies",
+    icon: Files,
+    description: "Upload, update, and manage the HR knowledge base.",
+  },
+  {
+    label: "Reports & Analytics",
+    href: "/admin/reports",
+    icon: BarChart3,
+    description: "Trends and insights across queries, users, and policies.",
+  },
+  {
+    label: "Audit Logs",
+    href: "/admin/audit-logs",
+    icon: ScrollText,
+    description: "A record of administrative and system actions.",
+  },
+  {
+    label: "System Settings",
+    href: "/admin/settings",
+    icon: Settings,
+    description: "Configure general, AI, cache, and maintenance options.",
+  },
+  {
+    label: "Profile",
+    href: "/admin/profile",
+    icon: UserIcon,
+    description: "Your administrator account and security settings.",
+  },
+];
+
 export const QUICK_QUESTIONS: string[] = [
   "How many vacation days do I get?",
   "What is the work-from-home policy?",
@@ -101,3 +161,58 @@ export const FEEDBACK_CATEGORIES: {
   { value: "user_experience", label: "User experience" },
   { value: "other", label: "Other" },
 ];
+
+/* ------------------------------- admin ---------------------------------- */
+
+/**
+ * Query workflow statuses (admin_query_meta.status). The list endpoint filters
+ * by exact status; the detail editor sets one of these.
+ */
+export const QUERY_STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: "open", label: "Open" },
+  { value: "in_progress", label: "In progress" },
+  { value: "resolved", label: "Resolved" },
+  { value: "closed", label: "Closed" },
+];
+
+/**
+ * Suggested query categories. The backend filters categories with a substring
+ * match and stores them as free text, so admins may also type a custom value;
+ * these are offered as convenient, consistent suggestions.
+ */
+export const QUERY_CATEGORIES: string[] = [
+  "Leave & Attendance",
+  "Payroll & Salary",
+  "Benefits & Insurance",
+  "Work From Home",
+  "Reimbursement",
+  "Onboarding",
+  "Performance",
+  "Code of Conduct",
+  "IT & Access",
+  "Other",
+];
+
+/** User account statuses (users.status). */
+export const USER_STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: "active", label: "Active" },
+  { value: "suspended", label: "Suspended" },
+  { value: "inactive", label: "Inactive" },
+];
+
+/** Assignable roles (users.role). */
+export const USER_ROLE_OPTIONS: { value: string; label: string }[] = [
+  { value: "employee", label: "Employee" },
+  { value: "admin", label: "Administrator" },
+];
+
+/** Policy document lifecycle statuses (documents.status). */
+export const POLICY_STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: "ready", label: "Ready" },
+  { value: "archived", label: "Archived" },
+  { value: "processing", label: "Processing" },
+  { value: "failed", label: "Failed" },
+];
+
+/** Default page size for admin tables. */
+export const ADMIN_PAGE_SIZE = 10;

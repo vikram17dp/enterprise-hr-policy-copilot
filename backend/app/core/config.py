@@ -60,6 +60,11 @@ class Settings(BaseSettings):
 
     # Security
     admin_api_key: str = ""
+    # Email that is auto-promoted to the `admin` role on sign-in/sync. The
+    # authoritative role still lives in the database (`users.role`); this only
+    # bootstraps the very first admin so no manual DB edit is required. Never
+    # stores a password — Supabase Auth remains the only credential source.
+    admin_email: str = ""
 
     # Infrastructure
     rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"

@@ -58,4 +58,31 @@ def get_current_user(
             detail="User profile not found. Please sign in again.",
         )
 
+    # App-level account suspension. The Supabase JWT is still valid, but a
+    # suspended internal account is denied access to every authenticated
+    # endpoint. (We cannot revoke the Supabase session without a service-role
+    # key, so enforcement happens here, server-side, on every request.)
+    if (getattr(user, "status", "active") or "active").lower() == "suspended":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account has been suspended. Contact an administrator.",
+        )
+
     return user
+
+
+def require_admin(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """Authorization gate for every /api/v1/admin/* endpoint.
+
+    The role is read from the authenticated user's database row (resolved from
+    the verified JWT in `get_current_user`) — NEVER from a client-supplied
+    value. A non-admin receives 403.
+    """
+    if (current_user.role or "").lower() != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator access required.",
+        )
+    return current_user

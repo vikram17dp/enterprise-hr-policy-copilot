@@ -1,19 +1,6 @@
-/**
- * Route: /admin/users
- * Placeholder — the admin experience is out of scope for the employee task.
- */
+import { UsersView } from "@/components/admin/views/UsersView";
+
+/** Route: /admin/users — user management. */
 export default function AdminUsersPage() {
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-      <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-slate-900">
-          User management
-        </h1>
-        <p className="mt-2 text-sm leading-6 text-slate-500">
-          The admin experience is out of scope for this task and will be
-          implemented separately.
-        </p>
-      </div>
-    </main>
-  );
+  return <UsersView />;
 }

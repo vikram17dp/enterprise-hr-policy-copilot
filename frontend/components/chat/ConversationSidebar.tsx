@@ -51,6 +51,13 @@ function groupOf(iso: string): Group {
   return "Previous";
 }
 
+interface ConversationSidebarProps {
+  /** Optional callback fired after navigating to a conversation (used by the mobile drawer to close itself). */
+  onNavigate?: () => void;
+  /** Optional class overrides (e.g. to fill a full-height drawer instead of the inline fixed height). */
+  className?: string;
+}
+
 /**
  * ChatGPT-style conversation rail shown beside the chat surface.
  *
@@ -59,7 +66,7 @@ function groupOf(iso: string): Group {
  * delete. Opening a conversation navigates to /chat/{id}; the backend enforces
  * ownership, so a conversation the user does not own cannot be loaded.
  */
-export function ConversationSidebar() {
+export function ConversationSidebar({ onNavigate, className }: ConversationSidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { conversationId: activeId } = useChatStore();
@@ -136,8 +143,9 @@ export function ConversationSidebar() {
       // TEMP-UI-DIAG (remove after verification): proves the clicked id.
       console.log("[TEMP-UI-DIAG] Selected conversation:", id);
       if (pathname !== `/chat/${id}`) router.push(`/chat/${id}`);
+      onNavigate?.();
     },
-    [pathname, router]
+    [pathname, router, onNavigate]
   );
 
   const submitRename = useCallback(async () => {
@@ -188,7 +196,12 @@ export function ConversationSidebar() {
   }, [deleteTarget, activeId, router]);
 
   return (
-    <aside className="flex h-[calc(100vh-13rem)] min-h-[480px] w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <aside
+      className={cn(
+        "flex h-[calc(100vh-13rem)] min-h-[480px] w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm",
+        className
+      )}
+    >
       <div className="shrink-0 border-b border-slate-100 p-3">
         <Button
           type="button"

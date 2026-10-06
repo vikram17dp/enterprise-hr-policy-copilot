@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/shared/Header";
 import { ChatWindow } from "@/components/chat/ChatWindow";
 import { ConversationSidebar } from "@/components/chat/ConversationSidebar";
+import { MobileConversationDrawer } from "@/components/chat/MobileConversationDrawer";
 
 interface AskPageProps {
   searchParams: Promise<{ q?: string | string[] }>;
@@ -23,6 +24,7 @@ export default async function AskPage({ searchParams }: AskPageProps) {
       <PageHeader
         title="Ask a Question"
         description="Get accurate answers based on your organization's HR policies."
+        actions={<MobileConversationDrawer />}
       />
       <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
         <div className="hidden lg:block">

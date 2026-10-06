@@ -42,6 +42,21 @@ class User(Base):
         default="employee",
     )
 
+    # App-level account status: 'active' | 'suspended' | 'inactive'.
+    # Suspension is enforced server-side in get_current_user (403). This is
+    # separate from Supabase auth state (we hold no service-role key to ban).
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="active",
+    )
+
+    # Optional organizational department, managed by admins.
+    department: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
     # Cloudinary profile picture. Only the secure URL is stored here (the image
     # binary lives in Cloudinary). `avatar_public_id` is kept so a replaced
     # avatar's previous image can be deleted server-side after a successful

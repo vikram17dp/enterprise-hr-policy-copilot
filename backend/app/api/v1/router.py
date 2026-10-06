@@ -7,6 +7,7 @@ from app.api.v1.endpoints.conversations import router as conversations_router
 from app.api.v1.endpoints.documents import router as documents_router
 from app.api.v1.endpoints.saved_answers import router as saved_answers_router
 from app.api.v1.endpoints.feedback import router as feedback_router
+from app.api.v1.endpoints.admin import router as admin_router
 
 
 router = APIRouter(
@@ -20,3 +21,4 @@ router.include_router(conversations_router)
 router.include_router(documents_router)
 router.include_router(saved_answers_router)
 router.include_router(feedback_router)
+router.include_router(admin_router)

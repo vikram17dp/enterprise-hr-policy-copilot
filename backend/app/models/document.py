@@ -43,8 +43,28 @@ class Document(Base):
         default="processing",
     )
 
+    # HR policy category (e.g. "holidays_and_leave"). Nullable: pre-existing
+    # rows and the seeded KB may not have one.
+    category: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    # Stable Pinecone `document_id` used to filter-delete this document's
+    # vectors on replace/delete (see scripts/replace_document.py). Nullable for
+    # legacy rows that were never ingested through the admin pipeline.
+    source_key: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
     cloudinary_url: Mapped[str | None] = mapped_column(
         Text,
+        nullable=True,
+    )
+
+    cloudinary_public_id: Mapped[str | None] = mapped_column(
+        String(255),
         nullable=True,
     )
 
@@ -56,5 +76,12 @@ class Document(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=datetime.utcnow,
+        nullable=False,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
         nullable=False,
     )

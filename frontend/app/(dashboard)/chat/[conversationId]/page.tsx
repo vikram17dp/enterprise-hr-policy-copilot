@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/shared/Header";
 import { ChatWindow } from "@/components/chat/ChatWindow";
 import { ConversationSidebar } from "@/components/chat/ConversationSidebar";
+import { MobileConversationDrawer } from "@/components/chat/MobileConversationDrawer";
 
 /**
  * Route: /chat/{conversationId}
@@ -23,6 +24,7 @@ export default async function ChatPage({ params }: ChatPageProps) {
       <PageHeader
         title="Conversation"
         description="Continue your previous HR policy conversation."
+        actions={<MobileConversationDrawer />}
       />
       <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
         <div className="hidden lg:block">
