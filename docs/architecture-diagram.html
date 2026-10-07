@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>HR Policy Copilot — Architecture</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    width: 500px;
+    margin: 0 auto;
+    background: #ffffff;
+    font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+    color: #0f172a;
+    padding: 18px 14px 26px;
+  }
+  h1 { font-size: 17px; font-weight: 700; letter-spacing: -0.2px; text-align: center; }
+  .sub { font-size: 10.5px; color: #64748b; text-align: center; margin-top: 3px; margin-bottom: 14px; }
+
+  .band {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 9px 10px 10px;
+    margin-bottom: 4px;
+    background: #fff;
+  }
+  .band-head { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; }
+  .band-tag {
+    font-size: 9px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;
+    color: #fff; border-radius: 4px; padding: 2px 6px; white-space: nowrap;
+  }
+  .band-title { font-size: 12px; font-weight: 700; color: #0f172a; }
+  .band-note { font-size: 9.5px; color: #64748b; margin-top: 5px; line-height: 1.45; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip {
+    font-size: 9.5px; font-weight: 600; border-radius: 6px; padding: 4px 7px;
+    border: 1px solid; line-height: 1.2;
+  }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+  .cell { border: 1px solid #e2e8f0; border-radius: 7px; padding: 6px 7px; background: #f8fafc; }
+  .cell b { display: block; font-size: 10px; margin-bottom: 2px; }
+  .cell span { font-size: 9px; color: #475569; line-height: 1.35; display: block; }
+
+  .arrow { text-align: center; color: #94a3b8; font-size: 12px; line-height: 14px; margin: 1px 0; }
+  .arrow .lbl { font-size: 8.5px; color: #64748b; display: block; }
+
+  /* layer accent colors */
+  .c-client  { background:#2563eb; } .b-client  .chip{ color:#1d4ed8; border-color:#bfdbfe; background:#eff6ff; }
+  .c-auth    { background:#7c3aed; } .b-auth    .chip{ color:#6d28d9; border-color:#ddd6fe; background:#f5f3ff; }
+  .c-api     { background:#059669; } .b-api     .chip{ color:#047857; border-color:#a7f3d0; background:#ecfdf5; }
+  .c-rag     { background:#d97706; } .b-rag     .chip{ color:#b45309; border-color:#fde68a; background:#fffbeb; }
+  .c-integ   { background:#0891b2; } .b-integ   .chip{ color:#0e7490; border-color:#a5f3fc; background:#ecfeff; }
+  .c-data    { background:#475569; } .b-data    .chip{ color:#334155; border-color:#cbd5e1; background:#f1f5f9; }
+  .c-ingest  { background:#db2777; } .b-ingest  .chip{ color:#be185d; border-color:#fbcfe8; background:#fdf2f8; }
+
+  .flow { margin-top: 12px; border-top: 1px dashed #cbd5e1; padding-top: 10px; }
+  .flow h2 { font-size: 11px; font-weight: 700; margin-bottom: 6px; }
+  .step { display: flex; gap: 7px; margin-bottom: 5px; }
+  .num {
+    flex: 0 0 16px; height: 16px; border-radius: 50%; background: #0f172a; color: #fff;
+    font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  }
+  .step p { font-size: 9.5px; color: #334155; line-height: 1.4; }
+  .step p b { color: #0f172a; }
+</style>
+</head>
+<body>
+  <h1>Enterprise HR Policy &amp; Employee Support</h1>
+  <div class="sub">Agentic RAG Copilot — System Architecture</div>
+
+  <!-- CLIENT -->
+  <div class="band b-client">
+    <div class="band-head"><span class="band-tag c-client">1 · Client</span><span class="band-title">Next.js 16 Web App (App Router, React 19)</span></div>
+    <div class="chips">
+      <span class="chip">Employee UI · /dashboard /ask /chat /conversations /documents /saved-answers /feedback /profile</span>
+      <span class="chip">Admin UI · /admin (overview, queries, users, policies, settings, audit-logs, reports, profile)</span>
+      <span class="chip">Tailwind v4 + shadcn/ui (Base UI)</span>
+      <span class="chip">Supabase JS client → session JWT (Bearer)</span>
+    </div>
+    <div class="band-note">Route guards: Next proxy/middleware + client ProtectedRoute (employee) / AdminRoute (admin). Responsive 320px→1440px+ with mobile drawers.</div>
+  </div>
+  <div class="arrow">▼<span class="lbl">HTTPS · Bearer JWT</span></div>
+
+  <!-- AUTH -->
+  <div class="band b-auth">
+    <div class="band-head"><span class="band-tag c-auth">2 · Auth</span><span class="band-title">Supabase Auth (identity only)</span></div>
+    <div class="chips">
+      <span class="chip">Sign-up / sign-in / password</span>
+      <span class="chip">Issues signed JWT</span>
+      <span class="chip">JWKS public keys for verification</span>
+    </div>
+    <div class="band-note">No service-role key in the app. Admin bootstrap: on first sync the user whose email matches ADMIN_EMAIL is promoted to role=admin.</div>
+  </div>
+  <div class="arrow">▼<span class="lbl">verify JWT (JWKS) → load users row</span></div>
+
+  <!-- API -->
+  <div class="band b-api">
+    <div class="band-head"><span class="band-tag c-api">3 · API</span><span class="band-title">FastAPI (Python) — /api/v1</span></div>
+    <div class="grid2">
+      <div class="cell"><b>Employee endpoints</b><span>auth · users · chat · conversations · documents · saved_answers · feedback</span></div>
+      <div class="cell"><b>Admin endpoints · /admin/*</b><span>dashboard metrics · queries triage · users · policies · audit-logs · reports · settings · maintenance · health · me</span></div>
+    </div>
+    <div class="band-note"><b>Authorization:</b> role read from the DB users row resolved from the verified JWT — never trusted from the client. require_admin → 403 for non-admins; suspended → 403. Every privileged action is written to audit_logs (no secrets logged).</div>
+  </div>
+  <div class="arrow">▼<span class="lbl">chat request</span></div>
+
+  <!-- RAG -->
+  <div class="band b-rag">
+    <div class="band-head"><span class="band-tag c-rag">4 · Agentic RAG</span><span class="band-title">LangGraph workflow (state machine)</span></div>
+    <div class="chips">
+      <span class="chip">Intent classification</span>
+      <span class="chip">Conditional routing</span>
+      <span class="chip">KB retrieval (Pinecone) + Cohere rerank</span>
+      <span class="chip">Web-search gate (Tavily) — EXTERNAL intent only</span>
+      <span class="chip">Grading / merge / clarification</span>
+      <span class="chip">Answer synthesis (Groq LLM) + citations</span>
+      <span class="chip">Conversation context (history)</span>
+      <span class="chip">Redis cache · context-aware key</span>
+    </div>
+    <div class="band-note">Cache is optional: a cache hit still persists the exchange to messages. KB changes invalidate the cache.</div>
+  </div>
+  <div class="arrow">▼<span class="lbl">calls</span></div>
+
+  <!-- INTEGRATIONS -->
+  <div class="band b-integ">
+    <div class="band-head"><span class="band-tag c-integ">5 · Integrations</span><span class="band-title">External AI / storage services</span></div>
+    <div class="grid2">
+      <div class="cell"><b>Groq</b><span>LLM inference (gpt-oss-120b)</span></div>
+      <div class="cell"><b>Cohere</b><span>embed-v4 embeddings + rerank</span></div>
+      <div class="cell"><b>Pinecone</b><span>vector index (namespace hr-policies)</span></div>
+      <div class="cell"><b>Tavily</b><span>live web search (gated)</span></div>
+      <div class="cell"><b>Cloudinary</b><span>original document object storage</span></div>
+      <div class="cell"><b>Redis (Docker)</b><span>optional response cache, TTL configurable</span></div>
+    </div>
+  </div>
+  <div class="arrow">▼<span class="lbl">persist / query</span></div>
+
+  <!-- DATA -->
+  <div class="band b-data">
+    <div class="band-head"><span class="band-tag c-data">6 · Data</span><span class="band-title">Supabase Postgres (SQLAlchemy)</span></div>
+    <div class="chips">
+      <span class="chip">users (role, status)</span>
+      <span class="chip">conversations</span>
+      <span class="chip">messages</span>
+      <span class="chip">documents (status, version)</span>
+      <span class="chip">audit_logs</span>
+      <span class="chip">saved_answers</span>
+      <span class="chip">feedback</span>
+      <span class="chip">admin_query_meta*</span>
+      <span class="chip">system_settings*</span>
+    </div>
+    <div class="band-note">* = the only two additive tables, introduced for admin query workflow state and editable non-secret settings. Everything else reuses existing tables.</div>
+  </div>
+  <div class="arrow">▲<span class="lbl">ingestion (admin upload)</span></div>
+
+  <!-- INGESTION -->
+  <div class="band b-ingest">
+    <div class="band-head"><span class="band-tag c-ingest">Ingestion</span><span class="band-title">Policy document pipeline</span></div>
+    <div class="chips">
+      <span class="chip">Upload (admin)</span><span class="chip">→ Cloudinary store</span><span class="chip">→ chunk</span><span class="chip">→ Cohere embed</span><span class="chip">→ Pinecone upsert</span><span class="chip">→ documents row (processing/ready/failed, version+1 on replace)</span>
+    </div>
+  </div>
+
+  <!-- REQUEST FLOW -->
+  <div class="flow">
+    <h2>Request flow — employee asks a question</h2>
+    <div class="step"><span class="num">1</span><p><b>Browser → Supabase Auth:</b> sign-in returns a session JWT.</p></div>
+    <div class="step"><span class="num">2</span><p><b>Browser → FastAPI:</b> POST /chat/ask with Bearer JWT.</p></div>
+    <div class="step"><span class="num">3</span><p><b>FastAPI:</b> verify JWT via JWKS, resolve users row, enforce role/status.</p></div>
+    <div class="step"><span class="num">4</span><p><b>Redis:</b> context-aware cache lookup (question + conversation).</p></div>
+    <div class="step"><span class="num">5</span><p><b>LangGraph:</b> classify intent → retrieve Pinecone + Cohere rerank → (Tavily if external) → grade/merge.</p></div>
+    <div class="step"><span class="num">6</span><p><b>Groq:</b> synthesize grounded answer with citations.</p></div>
+    <div class="step"><span class="num">7</span><p><b>Postgres:</b> persist conversation + messages; cache the response.</p></div>
+    <div class="step"><span class="num">8</span><p><b>Browser:</b> render answer, sources, and follow-ups.</p></div>
+  </div>
+</body>
+</html>
